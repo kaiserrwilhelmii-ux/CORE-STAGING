@@ -1,9 +1,10 @@
 <?php
 $current_page = basename($_SERVER['PHP_SELF']);
 $user_role = $_SESSION['role'] ?? '';
+$user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username'] ?? 'Administrator';
 ?>
 
-<!-- Gemini-Style Sidebar -->
+<!-- Gemini-Styled Sidebar -->
 <div id="appSidebar" class="sidebar">
     <!-- Header: Logo & Collapse Button -->
     <div class="sidebar-header">
@@ -72,43 +73,104 @@ $user_role = $_SESSION['role'] ?? '';
 </div>
 
 <style>
-/* 1. Sidebar Container (Scoped strictly to .sidebar) */
-.sidebar {
-    width: 260px;
-    height: 100vh;
-    background-color: #1e1f20;
-    color: #e3e3e3;
-    position: fixed;
-    top: 0;
-    left: 0;
-    display: flex;
-    flex-direction: column;
-    box-shadow: 4px 0 10px rgba(0, 0, 0, 0.15);
-    z-index: 1000;
-    box-sizing: border-box;
-    padding: 16px 12px;
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s ease;
-    overflow-x: hidden;
+/* 1. Theme Variables & Base Styles */
+:root {
+    --bg-color: #f4f6f9;
+    --text-color: #2c3e50;
+    --sidebar-bg: #1e1f20;
+    --sidebar-text: #ecf0f1;
+    --card-bg: #ffffff;
+    --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.08);
+    --input-bg: #ffffff;
+    --input-border: #dfe6e9;
+    --btn-primary: #3498db;
+    --btn-hover: #2980b9;
+    --border-color: #ecf0f1;
 }
 
-/* Collapsed Width */
-.sidebar.collapsed {
-    width: 70px;
-    padding: 16px 8px;
+body.dark-mode {
+    --bg-color: #1a1a1a;
+    --text-color: #ecf0f1;
+    --sidebar-bg: #131314;
+    --sidebar-text: #bdc3c7;
+    --card-bg: #2d2d2d;
+    --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    --input-bg: #404040;
+    --input-border: #555555;
+    --btn-primary: #3498db;
+    --btn-hover: #5dade2;
+    --border-color: #404040;
 }
 
-/* 2. Main Content Auto-Adjustment When Collapsed */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 100vh;
+}
+
+/* 2. Strict Layout Offset: Guarantees content starts beside the sidebar */
 .main-content {
-    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    margin-left: 260px !important;
+    width: calc(100% - 260px) !important;
+    padding: 30px !important;
+    box-sizing: border-box !important;
+    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-body.sidebar-collapsed .main-content,
+/* Content only moves when the sidebar element itself has .collapsed */
 .sidebar.collapsed ~ .main-content {
     margin-left: 70px !important;
     width: calc(100% - 70px) !important;
 }
 
-/* 3. Header & Toggle */
+/* 3. Cards & Header Styling */
+.top-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-bottom: 30px !important;
+    background: var(--card-bg) !important;
+    padding: 20px 25px !important;
+    border-radius: 12px !important;
+    box-shadow: var(--card-shadow) !important;
+}
+
+.card {
+    background: var(--card-bg) !important;
+    padding: 25px !important;
+    border-radius: 12px !important;
+    box-shadow: var(--card-shadow) !important;
+    margin-bottom: 25px !important;
+    border: 1px solid var(--border-color) !important;
+}
+
+/* 4. Sidebar Styles (Gemini Theme) */
+.sidebar {
+    width: 260px !important;
+    height: 100vh !important;
+    background-color: #1e1f20 !important;
+    color: #e3e3e3 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-shadow: 4px 0 10px rgba(0, 0, 0, 0.15) !important;
+    z-index: 1000 !important;
+    box-sizing: border-box !important;
+    padding: 16px 12px !important;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s ease !important;
+    overflow-x: hidden !important;
+}
+
+.sidebar.collapsed {
+    width: 70px !important;
+    padding: 16px 8px !important;
+}
+
 .sidebar-header {
     display: flex;
     align-items: center;
@@ -140,7 +202,6 @@ body.sidebar-collapsed .main-content,
     font-size: 16px;
     font-weight: 600;
     color: #f1f3f4;
-    letter-spacing: 0.2px;
 }
 
 .sidebar-toggle {
@@ -162,7 +223,7 @@ body.sidebar-collapsed .main-content,
     color: #ffffff;
 }
 
-/* 4. Navigation Links (Gemini Pill Style) */
+/* Nav Menu Items (Pill Style) */
 .sidebar-nav {
     display: flex;
     flex-direction: column;
@@ -181,7 +242,6 @@ body.sidebar-collapsed .main-content,
     font-weight: 500 !important;
     border-radius: 24px !important;
     margin: 0 !important;
-    transform: none !important;
     white-space: nowrap !important;
     transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease !important;
 }
@@ -189,15 +249,12 @@ body.sidebar-collapsed .main-content,
 .sidebar .nav-item:hover {
     background-color: rgba(255, 255, 255, 0.08) !important;
     color: #ffffff !important;
-    transform: none !important;
 }
 
-/* Active Highlight Pill */
 .sidebar .nav-item.active {
     background-color: #004a77 !important;
     color: #c2e7ff !important;
     font-weight: 600 !important;
-    transform: none !important;
 }
 
 .nav-icon {
@@ -211,7 +268,7 @@ body.sidebar-collapsed .main-content,
     white-space: nowrap;
 }
 
-/* 5. Logout Button */
+/* Logout Button */
 .sidebar-footer {
     margin-top: auto;
     padding-top: 15px;
@@ -231,25 +288,23 @@ body.sidebar-collapsed .main-content,
     font-weight: 600 !important;
     border-radius: 24px !important;
     margin: 0 !important;
-    transform: none !important;
     white-space: nowrap !important;
     transition: background-color 0.2s ease !important;
 }
 
 .sidebar .logout-btn:hover {
     background-color: #e74c3c !important;
-    transform: none !important;
 }
 
-/* 6. Collapsed States */
+/* Collapsed States */
 .sidebar.collapsed .brand-info,
 .sidebar.collapsed .nav-text {
-    display: none;
+    display: none !important;
 }
 
 .sidebar.collapsed .sidebar-header {
-    justify-content: center;
-    padding: 0;
+    justify-content: center !important;
+    padding: 0 !important;
 }
 
 .sidebar.collapsed .nav-item,
@@ -264,26 +319,12 @@ body.sidebar-collapsed .main-content,
     const sidebar = document.getElementById('appSidebar');
     const toggleBtn = document.getElementById('sidebarToggle');
 
-    function updateState(collapsed) {
-        if (collapsed) {
-            sidebar.classList.add('collapsed');
-            document.body.classList.add('sidebar-collapsed');
-        } else {
-            sidebar.classList.remove('collapsed');
-            document.body.classList.remove('sidebar-collapsed');
-        }
-    }
+    // Clears any stuck collapsed state so it loads fully expanded by default
+    localStorage.removeItem('sidebar_collapsed');
 
-    // Restore saved state
-    if (localStorage.getItem('sidebar_collapsed') === 'true') {
-        updateState(true);
-    }
-
-    if (toggleBtn) {
+    if (toggleBtn && sidebar) {
         toggleBtn.addEventListener('click', function () {
-            const isCollapsed = sidebar.classList.contains('collapsed');
-            updateState(!isCollapsed);
-            localStorage.setItem('sidebar_collapsed', !isCollapsed);
+            sidebar.classList.toggle('collapsed');
         });
     }
 })();
