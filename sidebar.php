@@ -32,6 +32,11 @@ $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username']
                 <i class="nav-icon fas fa-file-alt"></i>
                 <span class="nav-text">Evaluations</span>
             </a>
+            <!-- Added My Profile for Admin -->
+            <a href="profile.php" class="nav-item <?= $current_page === 'profile.php' ? 'active' : '' ?>" title="My Profile">
+                <i class="nav-icon fas fa-user"></i>
+                <span class="nav-text">My Profile</span>
+            </a>
 
         <?php elseif ($user_role === 'supervisor'): ?>
             <a href="supervisor_dashboard.php" class="nav-item <?= $current_page === 'supervisor_dashboard.php' ? 'active' : '' ?>" title="Dashboard">
