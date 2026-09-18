@@ -75,16 +75,9 @@ $supervisors = $conn->query($sql_supervisors);
 
 <?php include 'sidebar.php'; ?>
 
-    <div class="main-content">
-        
-        <div class="top-header">
-            <div class="greeting-box">
-                <h2><span id="greetingText">Welcome,</span> <?php echo htmlspecialchars($_SESSION['fullname'] ?? 'Admin'); ?></h2>
-                <div id="currentDate" class="date-box">Loading date...</div>
-            </div>
-            <button id="themeToggle" class="theme-toggle">
-                <i class="fas fa-moon"></i> Dark Mode
-            </button>
+    <div class="main-content">     
+    <!-- Universal Top Header Banner -->
+        <?php include 'header.php'; ?>
         </div>
 
         <?php if($reset_count > 0): ?>
