@@ -111,7 +111,7 @@ body {
     min-height: 100vh;
 }
 
-/* 2. Strict Layout Offset: Guarantees content starts beside the sidebar */
+/* 2. Main Content Layout Offset */
 .main-content {
     margin-left: 260px !important;
     width: calc(100% - 260px) !important;
@@ -120,13 +120,12 @@ body {
     transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-/* Content only moves when the sidebar element itself has .collapsed */
 .sidebar.collapsed ~ .main-content {
     margin-left: 70px !important;
     width: calc(100% - 70px) !important;
 }
 
-/* 3. Cards & Header Styling */
+/* 3. Header & Greeting Box */
 .top-header {
     display: flex !important;
     justify-content: space-between !important;
@@ -138,6 +137,42 @@ body {
     box-shadow: var(--card-shadow) !important;
 }
 
+.greeting-box h2 {
+    margin: 0 !important;
+    font-size: 24px !important;
+    font-weight: 700 !important;
+    color: var(--text-color) !important;
+}
+
+.date-box {
+    font-size: 14px !important;
+    opacity: 0.7 !important;
+    margin-top: 5px !important;
+    color: var(--text-color) !important;
+}
+
+/* Dark Mode Toggle Button */
+.theme-toggle {
+    background: transparent !important;
+    border: 2px solid var(--text-color) !important;
+    color: var(--text-color) !important;
+    padding: 8px 16px !important;
+    border-radius: 20px !important;
+    cursor: pointer !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    transition: all 0.2s ease !important;
+}
+
+.theme-toggle:hover {
+    background: var(--text-color) !important;
+    color: var(--card-bg) !important;
+}
+
+/* 4. Cards & Tables */
 .card {
     background: var(--card-bg) !important;
     padding: 25px !important;
@@ -147,7 +182,91 @@ body {
     border: 1px solid var(--border-color) !important;
 }
 
-/* 4. Sidebar Styles (Gemini Theme) */
+.card h3 {
+    margin-top: 0 !important;
+    color: var(--text-color) !important;
+    font-size: 18px !important;
+}
+
+table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 10px !important;
+}
+
+th, td {
+    padding: 14px 16px !important;
+    text-align: left !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    font-size: 14px !important;
+}
+
+th {
+    background-color: rgba(0, 0, 0, 0.03) !important;
+    color: var(--text-color) !important;
+    font-weight: 600 !important;
+}
+
+tr:hover {
+    background-color: rgba(0, 0, 0, 0.015) !important;
+}
+
+/* 5. Buttons & Badges (Matching Production) */
+.btn {
+    padding: 8px 14px !important;
+    border: none !important;
+    border-radius: 6px !important;
+    cursor: pointer !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    text-decoration: none !important;
+    transition: transform 0.15s ease, opacity 0.15s ease !important;
+}
+
+.btn:hover {
+    opacity: 0.9 !important;
+    transform: translateY(-1px) !important;
+}
+
+/* Grade / Edit Button (Orange) */
+.btn-edit {
+    background-color: #f39c12 !important;
+    color: #ffffff !important;
+}
+
+/* Eye / View Button (Blue) */
+.btn-view, a[href*="admin_view_student"], a[href*="add_user"] {
+    background-color: #3498db !important;
+    color: #ffffff !important;
+}
+
+/* Remove Button (Red) */
+.btn-remove {
+    background-color: #e74c3c !important;
+    color: #ffffff !important;
+}
+
+/* Badges for Scores & Roles */
+.score-badge, .badge {
+    padding: 4px 10px !important;
+    border-radius: 12px !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    color: #ffffff !important;
+    display: inline-block !important;
+    text-align: center !important;
+}
+
+.bg-green { background-color: #27ae60 !important; }
+.bg-yellow { background-color: #f1c40f !important; color: #333333 !important; }
+.bg-red { background-color: #e74c3c !important; }
+.bg-grey { background-color: #bdc3c7 !important; color: #ffffff !important; }
+
+/* 6. Sidebar Styles (Gemini Theme) */
 .sidebar {
     width: 260px !important;
     height: 100vh !important;
@@ -223,7 +342,6 @@ body {
     color: #ffffff;
 }
 
-/* Nav Menu Items (Pill Style) */
 .sidebar-nav {
     display: flex;
     flex-direction: column;
@@ -268,7 +386,6 @@ body {
     white-space: nowrap;
 }
 
-/* Logout Button */
 .sidebar-footer {
     margin-top: auto;
     padding-top: 15px;
@@ -296,7 +413,6 @@ body {
     background-color: #e74c3c !important;
 }
 
-/* Collapsed States */
 .sidebar.collapsed .brand-info,
 .sidebar.collapsed .nav-text {
     display: none !important;
@@ -319,12 +435,37 @@ body {
     const sidebar = document.getElementById('appSidebar');
     const toggleBtn = document.getElementById('sidebarToggle');
 
-    // Clears any stuck collapsed state so it loads fully expanded by default
-    localStorage.removeItem('sidebar_collapsed');
-
+    // Sidebar Collapse
     if (toggleBtn && sidebar) {
         toggleBtn.addEventListener('click', function () {
             sidebar.classList.toggle('collapsed');
+        });
+    }
+
+    // Live Date Formatter (fixes "Loading date...")
+    const dateEl = document.getElementById('currentDate');
+    if (dateEl) {
+        const now = new Date();
+        dateEl.textContent = now.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+        });
+    }
+
+    // Dark Mode Toggle
+    const themeBtn = document.getElementById('themeToggle');
+    if (themeBtn) {
+        if (localStorage.getItem('theme') === 'dark') {
+            document.body.classList.add('dark-mode');
+        }
+        themeBtn.addEventListener('click', function () {
+            document.body.classList.toggle('dark-mode');
+            localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
         });
     }
 })();
