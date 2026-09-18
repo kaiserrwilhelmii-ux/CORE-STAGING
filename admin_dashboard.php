@@ -50,8 +50,9 @@ $supervisors = $conn->query($sql_supervisors);
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <title>Admin Dashboard</title>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
@@ -73,12 +74,14 @@ $supervisors = $conn->query($sql_supervisors);
 </head>
 <body>
 
-<?php include 'sidebar.php'; ?>
+    <!-- Main Left Sidebar -->
+    <?php include 'sidebar.php'; ?>
 
-    <div class="main-content">     
-    <!-- Universal Top Header Banner -->
+    <!-- Main Content Container (Wraps the ENTIRE page) -->
+    <div class="main-content">
+        
+        <!-- Universal Top Header Banner -->
         <?php include 'header.php'; ?>
-        </div>
 
         <?php if($reset_count > 0): ?>
         <div class="card" style="background: #fff5f5; border-left: 5px solid #e74c3c; border-radius: 8px; margin-bottom: 25px; display:flex; justify-content:space-between; align-items:center;">
@@ -90,6 +93,7 @@ $supervisors = $conn->query($sql_supervisors);
         </div>
         <?php endif; ?>
 
+        <!-- Stat Cards -->
         <div class="stats-grid">
             <div class="stat-card" style="border-color: #3498db;">
                 <h3><?php echo $total_students; ?></h3>
@@ -105,6 +109,7 @@ $supervisors = $conn->query($sql_supervisors);
             </div>
         </div>
 
+        <!-- Dashboard Split Grid -->
         <div class="dashboard-split">
             
             <div class="card" style="border-top: 4px solid #c0392b;">
@@ -137,7 +142,6 @@ $supervisors = $conn->query($sql_supervisors);
 
             <div class="card" style="border-top: 4px solid #2980b9;">
                 <h3><i class="fas fa-chart-line"></i> Top Performing Students</h3>
-                
                 <table>
                     <thead>
                         <tr>
@@ -180,6 +184,7 @@ $supervisors = $conn->query($sql_supervisors);
 
         </div>
 
+        <!-- Supervisors List -->
         <div class="card" style="border-top: 4px solid #8e44ad;">
             <h3><i class="fas fa-chalkboard-teacher"></i> Registered Cooperating Teachers (Supervisors)</h3>
             <?php if ($supervisors && $supervisors->num_rows > 0): ?>
@@ -220,7 +225,7 @@ $supervisors = $conn->query($sql_supervisors);
             <?php endif; ?>
         </div>
 
-    </div>
-    <script src="js/script.js"></script>
+    </div> <!-- Properly closes .main-content here at the end -->
+
 </body>
 </html>
