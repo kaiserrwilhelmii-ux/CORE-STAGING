@@ -1,22 +1,14 @@
 <?php
 $current_page = basename($_SERVER['PHP_SELF']);
 $user_role = $_SESSION['role'] ?? '';
-// Reads fullname first (e.g. System Administrator), then name/username
-$user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username'] ?? 'User';
-
-if (!function_exists('isActive')) {
-    function isActive($page, $current) {
-        return $page === $current ? 'active' : '';
-    }
-}
 ?>
 
-<!-- Gemini-Styled Sidebar -->
-<aside id="appSidebar" class="sidebar">
+<!-- Gemini-Style Sidebar -->
+<div id="appSidebar" class="sidebar">
     <!-- Header: Logo & Collapse Button -->
     <div class="sidebar-header">
         <div class="brand-info">
-            <span class="brand-icon"><i class="fas fa-graduation-cap"></i></span>
+            <i class="fas fa-graduation-cap brand-icon"></i>
             <span class="brand-title">CORE Evaluation</span>
         </div>
         <button type="button" class="sidebar-toggle" id="sidebarToggle" title="Toggle Sidebar">
@@ -27,126 +19,111 @@ if (!function_exists('isActive')) {
     <!-- Navigation Menu -->
     <nav class="sidebar-nav">
         <?php if ($user_role === 'admin'): ?>
-            <a href="admin_dashboard.php" class="nav-item <?= isActive('admin_dashboard.php', $current_page) ?>" title="Dashboard">
+            <a href="admin_dashboard.php" class="nav-item <?= $current_page === 'admin_dashboard.php' ? 'active' : '' ?>" title="Dashboard">
                 <i class="nav-icon fas fa-tachometer-alt"></i>
                 <span class="nav-text">Dashboard</span>
             </a>
-            <a href="admin_manage.php" class="nav-item <?= isActive('admin_manage.php', $current_page) ?>" title="Manage Users">
+            <a href="admin_manage.php" class="nav-item <?= $current_page === 'admin_manage.php' ? 'active' : '' ?>" title="Manage Users">
                 <i class="nav-icon fas fa-users"></i>
                 <span class="nav-text">Manage Users</span>
             </a>
-            <a href="admin_evaluations.php" class="nav-item <?= isActive('admin_evaluations.php', $current_page) ?>" title="Evaluations">
+            <a href="admin_evaluations.php" class="nav-item <?= $current_page === 'admin_evaluations.php' ? 'active' : '' ?>" title="Evaluations">
                 <i class="nav-icon fas fa-file-alt"></i>
                 <span class="nav-text">Evaluations</span>
             </a>
 
         <?php elseif ($user_role === 'supervisor'): ?>
-            <a href="supervisor_dashboard.php" class="nav-item <?= isActive('supervisor_dashboard.php', $current_page) ?>" title="Dashboard">
+            <a href="supervisor_dashboard.php" class="nav-item <?= $current_page === 'supervisor_dashboard.php' ? 'active' : '' ?>" title="Dashboard">
                 <i class="nav-icon fas fa-tachometer-alt"></i>
                 <span class="nav-text">Dashboard</span>
             </a>
-            <a href="profile.php" class="nav-item <?= isActive('profile.php', $current_page) ?>" title="My Profile">
+            <a href="profile.php" class="nav-item <?= $current_page === 'profile.php' ? 'active' : '' ?>" title="My Profile">
                 <i class="nav-icon fas fa-user"></i>
                 <span class="nav-text">My Profile</span>
             </a>
 
         <?php elseif ($user_role === 'student_teacher'): ?>
-            <a href="dashboard.php" class="nav-item <?= isActive('dashboard.php', $current_page) ?>" title="Dashboard">
+            <a href="dashboard.php" class="nav-item <?= $current_page === 'dashboard.php' ? 'active' : '' ?>" title="Dashboard">
                 <i class="nav-icon fas fa-chart-line"></i>
                 <span class="nav-text">Dashboard</span>
             </a>
-            <a href="user_evaluations.php" class="nav-item <?= isActive('user_evaluations.php', $current_page) ?>" title="My Evaluations">
+            <a href="user_evaluations.php" class="nav-item <?= $current_page === 'user_evaluations.php' ? 'active' : '' ?>" title="My Evaluations">
                 <i class="nav-icon fas fa-clipboard-check"></i>
                 <span class="nav-text">My Evaluations</span>
             </a>
-            <a href="student_portfolio.php" class="nav-item <?= isActive('student_portfolio.php', $current_page) ?>" title="My Portfolio">
+            <a href="student_portfolio.php" class="nav-item <?= $current_page === 'student_portfolio.php' ? 'active' : '' ?>" title="My Portfolio">
                 <i class="nav-icon fas fa-folder-open"></i>
                 <span class="nav-text">My Portfolio</span>
             </a>
-            <a href="profile.php" class="nav-item <?= isActive('profile.php', $current_page) ?>" title="My Profile">
+            <a href="profile.php" class="nav-item <?= $current_page === 'profile.php' ? 'active' : '' ?>" title="My Profile">
                 <i class="nav-icon fas fa-user"></i>
                 <span class="nav-text">My Profile</span>
             </a>
         <?php endif; ?>
     </nav>
 
-    <!-- Bottom Footer: User Info & Logout -->
+    <!-- Bottom Logout Button -->
     <div class="sidebar-footer">
-        <div class="user-card" title="<?= htmlspecialchars($user_name) ?>">
-            <div class="user-avatar">
-                <?= strtoupper(substr($user_name, 0, 1)) ?>
-            </div>
-            <div class="user-details">
-                <span class="user-name"><?= htmlspecialchars($user_name) ?></span>
-                <span class="user-role"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $user_role))) ?></span>
-            </div>
-        </div>
-
         <a href="logout.php" class="logout-btn" title="Logout">
             <i class="nav-icon fas fa-sign-out-alt"></i>
             <span class="nav-text">Logout</span>
         </a>
     </div>
-</aside>
+</div>
 
 <style>
-/* 1. Global Layout Fix: Place sidebar and main content side-by-side */
-body {
-    display: flex !important;
-    flex-direction: row !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    min-height: 100vh;
-    overflow-x: hidden;
-}
-
-/* Ensure the main page content fills the remaining width next to the sidebar */
-body > *:not(.sidebar):not(script):not(style) {
-    flex: 1 1 0% !important;
-    min-width: 0 !important;
-    box-sizing: border-box;
-}
-
-/* 2. Sidebar Container */
+/* 1. Sidebar Container (Scoped strictly to .sidebar) */
 .sidebar {
-    width: 250px;
+    width: 260px;
     height: 100vh;
-    position: sticky;
-    top: 0;
     background-color: #1e1f20;
     color: #e3e3e3;
+    position: fixed;
+    top: 0;
+    left: 0;
     display: flex;
     flex-direction: column;
-    flex-shrink: 0;
-    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    user-select: none;
-    overflow-x: hidden;
-    overflow-y: auto;
-    box-sizing: border-box;
+    box-shadow: 4px 0 10px rgba(0, 0, 0, 0.15);
     z-index: 1000;
+    box-sizing: border-box;
+    padding: 16px 12px;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s ease;
+    overflow-x: hidden;
 }
 
 /* Collapsed Width */
 .sidebar.collapsed {
-    width: 68px;
+    width: 70px;
+    padding: 16px 8px;
 }
 
-/* Header */
+/* 2. Main Content Auto-Adjustment When Collapsed */
+.main-content {
+    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.sidebar-collapsed .main-content,
+.sidebar.collapsed ~ .main-content {
+    margin-left: 70px !important;
+    width: calc(100% - 70px) !important;
+}
+
+/* 3. Header & Toggle */
 .sidebar-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 14px;
-    height: 60px;
-    flex-shrink: 0;
+    height: 48px;
+    padding: 0 6px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
     box-sizing: border-box;
 }
 
 .brand-info {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     overflow: hidden;
     white-space: nowrap;
 }
@@ -154,19 +131,18 @@ body > *:not(.sidebar):not(script):not(style) {
 .brand-icon {
     font-size: 18px;
     color: #a8c7fa;
-    width: 24px;
+    width: 22px;
     text-align: center;
     flex-shrink: 0;
 }
 
 .brand-title {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 600;
     color: #f1f3f4;
-    white-space: nowrap;
+    letter-spacing: 0.2px;
 }
 
-/* Collapse Toggle Button */
 .sidebar-toggle {
     background: transparent;
     border: none;
@@ -186,40 +162,42 @@ body > *:not(.sidebar):not(script):not(style) {
     color: #ffffff;
 }
 
-/* Navigation List */
+/* 4. Navigation Links (Gemini Pill Style) */
 .sidebar-nav {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 10px 10px;
+    gap: 6px;
     flex-grow: 1;
 }
 
-/* Navigation Links */
-.nav-item {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 10px 14px;
-    color: #c4c7c5;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    border-radius: 24px;
-    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease;
-    white-space: nowrap;
+.sidebar .nav-item {
+    display: flex !important;
+    align-items: center !important;
+    gap: 14px !important;
+    padding: 12px 16px !important;
+    color: #bdc3c7 !important;
+    text-decoration: none !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    border-radius: 24px !important;
+    margin: 0 !important;
+    transform: none !important;
+    white-space: nowrap !important;
+    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease !important;
 }
 
-.nav-item:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-    color: #ffffff;
+.sidebar .nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
+    transform: none !important;
 }
 
-/* Active Highlight */
-.nav-item.active {
-    background-color: #004a77;
-    color: #c2e7ff;
-    font-weight: 600;
+/* Active Highlight Pill */
+.sidebar .nav-item.active {
+    background-color: #004a77 !important;
+    color: #c2e7ff !important;
+    font-weight: 600 !important;
+    transform: none !important;
 }
 
 .nav-icon {
@@ -233,100 +211,51 @@ body > *:not(.sidebar):not(script):not(style) {
     white-space: nowrap;
 }
 
-/* Footer Section */
+/* 5. Logout Button */
 .sidebar-footer {
-    padding: 12px 10px;
     margin-top: auto;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex-shrink: 0;
+    padding-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-/* User Card */
-.user-card {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 10px;
-    border-radius: 24px;
-    background-color: rgba(255, 255, 255, 0.03);
-    white-space: nowrap;
-    overflow: hidden;
+.sidebar .logout-btn {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 10px !important;
+    padding: 12px 16px !important;
+    background-color: #c0392b !important;
+    color: #ffffff !important;
+    text-decoration: none !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border-radius: 24px !important;
+    margin: 0 !important;
+    transform: none !important;
+    white-space: nowrap !important;
+    transition: background-color 0.2s ease !important;
 }
 
-.user-avatar {
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background-color: #37393b;
-    color: #a8c7fa;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 13px;
-    font-weight: 600;
-    flex-shrink: 0;
+.sidebar .logout-btn:hover {
+    background-color: #e74c3c !important;
+    transform: none !important;
 }
 
-.user-details {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.2;
-    overflow: hidden;
-}
-
-.user-name {
-    font-size: 13px;
-    font-weight: 500;
-    color: #e3e3e3;
-    text-overflow: ellipsis;
-    overflow: hidden;
-}
-
-.user-role {
-    font-size: 11px;
-    color: #9aa0a6;
-}
-
-/* Logout Button */
-.logout-btn {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    padding: 10px 14px;
-    color: #f87171;
-    background-color: rgba(239, 68, 68, 0.08);
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    border-radius: 24px;
-    transition: background-color 0.2s ease, color 0.2s ease;
-    white-space: nowrap;
-}
-
-.logout-btn:hover {
-    background-color: #dc2626;
-    color: #ffffff;
-}
-
-/* Collapsed Behavior */
+/* 6. Collapsed States */
 .sidebar.collapsed .brand-info,
-.sidebar.collapsed .nav-text,
-.sidebar.collapsed .user-details {
+.sidebar.collapsed .nav-text {
     display: none;
 }
 
 .sidebar.collapsed .sidebar-header {
     justify-content: center;
+    padding: 0;
 }
 
 .sidebar.collapsed .nav-item,
-.sidebar.collapsed .logout-btn,
-.sidebar.collapsed .user-card {
-    justify-content: center;
-    padding: 10px 0;
+.sidebar.collapsed .logout-btn {
+    justify-content: center !important;
+    padding: 12px 0 !important;
 }
 </style>
 
@@ -335,14 +264,26 @@ body > *:not(.sidebar):not(script):not(style) {
     const sidebar = document.getElementById('appSidebar');
     const toggleBtn = document.getElementById('sidebarToggle');
 
+    function updateState(collapsed) {
+        if (collapsed) {
+            sidebar.classList.add('collapsed');
+            document.body.classList.add('sidebar-collapsed');
+        } else {
+            sidebar.classList.remove('collapsed');
+            document.body.classList.remove('sidebar-collapsed');
+        }
+    }
+
+    // Restore saved state
     if (localStorage.getItem('sidebar_collapsed') === 'true') {
-        sidebar.classList.add('collapsed');
+        updateState(true);
     }
 
     if (toggleBtn) {
         toggleBtn.addEventListener('click', function () {
-            sidebar.classList.toggle('collapsed');
-            localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed'));
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            updateState(!isCollapsed);
+            localStorage.setItem('sidebar_collapsed', !isCollapsed);
         });
     }
 })();
