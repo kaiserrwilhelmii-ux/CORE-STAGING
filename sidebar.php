@@ -1,7 +1,8 @@
 <?php
 $current_page = basename($_SERVER['PHP_SELF']);
 $user_role = $_SESSION['role'] ?? '';
-$user_name = $_SESSION['name'] ?? $_SESSION['username'] ?? 'User';
+// Reads fullname first (e.g. System Administrator), then name/username
+$user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username'] ?? 'User';
 
 if (!function_exists('isActive')) {
     function isActive($page, $current) {
@@ -89,10 +90,29 @@ if (!function_exists('isActive')) {
 </aside>
 
 <style>
-/* Sidebar Container */
+/* 1. Global Layout Fix: Place sidebar and main content side-by-side */
+body {
+    display: flex !important;
+    flex-direction: row !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* Ensure the main page content fills the remaining width next to the sidebar */
+body > *:not(.sidebar):not(script):not(style) {
+    flex: 1 1 0% !important;
+    min-width: 0 !important;
+    box-sizing: border-box;
+}
+
+/* 2. Sidebar Container */
 .sidebar {
     width: 250px;
-    min-height: 100vh;
+    height: 100vh;
+    position: sticky;
+    top: 0;
     background-color: #1e1f20;
     color: #e3e3e3;
     display: flex;
@@ -102,7 +122,9 @@ if (!function_exists('isActive')) {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     user-select: none;
     overflow-x: hidden;
+    overflow-y: auto;
     box-sizing: border-box;
+    z-index: 1000;
 }
 
 /* Collapsed Width */
@@ -117,6 +139,7 @@ if (!function_exists('isActive')) {
     justify-content: space-between;
     padding: 16px 14px;
     height: 60px;
+    flex-shrink: 0;
     box-sizing: border-box;
 }
 
@@ -172,7 +195,7 @@ if (!function_exists('isActive')) {
     flex-grow: 1;
 }
 
-/* Navigation Links (Pill Style) */
+/* Navigation Links */
 .nav-item {
     display: flex;
     align-items: center;
@@ -218,6 +241,7 @@ if (!function_exists('isActive')) {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    flex-shrink: 0;
 }
 
 /* User Card */
@@ -307,7 +331,6 @@ if (!function_exists('isActive')) {
 </style>
 
 <script>
-// Handles sidebar toggling and remembers collapsed/expanded state across pages
 (function () {
     const sidebar = document.getElementById('appSidebar');
     const toggleBtn = document.getElementById('sidebarToggle');
