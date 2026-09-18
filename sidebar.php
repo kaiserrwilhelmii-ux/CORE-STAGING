@@ -432,41 +432,62 @@ tr:hover {
 
 <script>
 (function () {
-    const sidebar = document.getElementById('appSidebar');
-    const toggleBtn = document.getElementById('sidebarToggle');
-
-    // Sidebar Collapse
-    if (toggleBtn && sidebar) {
-        toggleBtn.addEventListener('click', function () {
-            sidebar.classList.toggle('collapsed');
-        });
+    // 1. Immediately apply saved theme to avoid white flash
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add('dark-mode');
     }
 
-    // Live Date Formatter (fixes "Loading date...")
-    const dateEl = document.getElementById('currentDate');
-    if (dateEl) {
-        const now = new Date();
-        dateEl.textContent = now.toLocaleDateString('en-US', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-        });
-    }
-
-    // Dark Mode Toggle
-    const themeBtn = document.getElementById('themeToggle');
-    if (themeBtn) {
-        if (localStorage.getItem('theme') === 'dark') {
-            document.body.classList.add('dark-mode');
-        }
-        themeBtn.addEventListener('click', function () {
+    // 2. Global Event Listener for Dark Mode Button (Works anywhere on the page)
+    document.addEventListener('click', function (e) {
+        const themeBtn = e.target.closest('#themeToggle, .theme-toggle');
+        if (themeBtn) {
+            e.preventDefault();
             document.body.classList.toggle('dark-mode');
-            localStorage.setItem('theme', document.body.classList.contains('dark-mode') ? 'dark' : 'light');
-        });
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            themeBtn.innerHTML = isDark
+                ? '<i class="fas fa-sun"></i> Light Mode'
+                : '<i class="fas fa-moon"></i> Dark Mode';
+        }
+    });
+
+    // 3. Initialize Widgets Once the DOM is ready
+    function initWidgets() {
+        // Format live date
+        const dateEl = document.getElementById('currentDate');
+        if (dateEl) {
+            const now = new Date();
+            dateEl.textContent = now.toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+
+        // Sync Dark Mode button text with current state
+        const themeBtn = document.getElementById('themeToggle');
+        if (themeBtn && document.body.classList.contains('dark-mode')) {
+            themeBtn.innerHTML = '<i class="fas fa-sun"></i> Light Mode';
+        }
+
+        // Sidebar Collapse Toggle
+        const sidebar = document.getElementById('appSidebar');
+        const toggleBtn = document.getElementById('sidebarToggle');
+        if (toggleBtn && sidebar) {
+            toggleBtn.onclick = function () {
+                sidebar.classList.toggle('collapsed');
+            };
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initWidgets);
+    } else {
+        initWidgets();
     }
 })();
 </script>
