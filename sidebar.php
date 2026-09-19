@@ -606,62 +606,43 @@ tr:hover {
 
 <script>
 (function () {
-    // 1. Immediately apply saved dark theme
+    const sidebar = document.getElementById('appSidebar');
+    const toggleBtn = document.getElementById('sidebarToggle');
+
+    // 1. Immediately check and restore saved collapse state
+    if (localStorage.getItem('sidebar_collapsed') === 'true' && sidebar) {
+        sidebar.classList.add('collapsed');
+    }
+
+    // 2. Save preference whenever the user clicks the toggle
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', function () {
+            sidebar.classList.toggle('collapsed');
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
+        });
+    }
+
+    // 3. Keep dark mode & Block Launcher intact
     if (localStorage.getItem('theme') === 'dark') {
         document.body.classList.add('dark-mode');
     }
 
-    // 2. Global Dark Mode Toggle Listener
-    document.addEventListener('click', function (e) {
-        const themeBtn = e.target.closest('#themeToggle, .theme-toggle');
-        if (themeBtn) {
-            e.preventDefault();
-            document.body.classList.toggle('dark-mode');
-            const isDark = document.body.classList.contains('dark-mode');
-            localStorage.setItem('theme', isDark ? 'dark' : 'light');
-            themeBtn.innerHTML = isDark
-                ? '<i class="fas fa-sun"></i> Light Mode'
-                : '<i class="fas fa-moon"></i> Dark Mode';
-        }
-    });
-
-    // 3. Block Launcher Popover Logic
     const launcherBtn = document.getElementById('blockLauncherBtn');
     const appMenu = document.getElementById('blockAppMenu');
-
     if (launcherBtn && appMenu) {
         launcherBtn.addEventListener('click', function (e) {
             e.stopPropagation();
             const rect = launcherBtn.getBoundingClientRect();
-            
-            // Position neatly relative to the button
             appMenu.style.top = (rect.bottom + 8) + 'px';
             appMenu.style.left = Math.max(10, rect.left) + 'px';
             appMenu.classList.toggle('show');
         });
-
-        // Close when clicking outside or pressing Escape
         document.addEventListener('click', function (e) {
             if (!appMenu.contains(e.target) && e.target !== launcherBtn) {
                 appMenu.classList.remove('show');
             }
         });
-
-        document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-                appMenu.classList.remove('show');
-            }
-        });
-    }
-
-    // 4. Sidebar Collapse Toggle
-    const sidebar = document.getElementById('appSidebar');
-    const toggleBtn = document.getElementById('sidebarToggle');
-    if (toggleBtn && sidebar) {
-        toggleBtn.onclick = function () {
-            sidebar.classList.toggle('collapsed');
-            if (appMenu) appMenu.classList.remove('show');
-        };
     }
 })();
 </script>
