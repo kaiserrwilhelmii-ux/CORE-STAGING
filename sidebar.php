@@ -7,23 +7,47 @@ $current_page = basename($_SERVER['PHP_SELF']);
 $user_role    =$_SESSION['role'] ?? 'user';
 $user_id      = intval($_SESSION['user_id'] ?? 0);
 
-// Live user data fetch (for photo, name, email)
+// Live user data fetch (for photo, name, email, gender)
 $u_data = [
     'fullname'    => $_SESSION['fullname'] ?? 'User',
     'username'    => $_SESSION['username'] ?? '',
     'email'       => $_SESSION['email'] ?? '',
+    'gender'      => $_SESSION['gender'] ?? '',
     'profile_pic' => ''
 ];
 
 if (isset($conn) &&$user_id > 0) {
-    $u_res =$conn->query("SELECT fullname, username, email, profile_pic FROM users WHERE id = $user_id LIMIT 1");
+    $u_res =$conn->query("SELECT fullname, username, email, gender, profile_pic FROM users WHERE id = $user_id LIMIT 1");
     if ($u_res &&$u_res->num_rows > 0) {
         $u_data =$u_res->fetch_assoc();
     }
 }
 
-$u_initials   = strtoupper(substr($u_data['fullname'] ?? 'U', 0, 1));
 $u_role_badge = ucwords(str_replace('_', ' ',$user_role));
+
+// -------------------------------------------------------------
+// Avatar & Gender Fallback Logic
+// -------------------------------------------------------------
+$has_pic = !empty($u_data['profile_pic']);
+$gender_clean = strtolower(trim($u_data['gender'] ?? ''));
+
+$avatar_class = "avatar-neutral";
+$avatar_icon  = '<i class="fas fa-user-astronaut"></i>';
+$avatar_style = "";
+
+if ($has_pic) {$avatar_class = "avatar-custom-img";
+    $avatar_style = "background-image: url('" . htmlspecialchars($u_data['profile_pic']) . "');";
+} else {
+    if ($gender_clean === 'male') {$avatar_class = "avatar-male";
+        $avatar_icon  = '<i class="fas fa-user"></i>';
+    } elseif ($gender_clean === 'female') {$avatar_class = "avatar-female";
+        $avatar_icon  = '<i class="fas fa-user"></i>';
+    } else {
+        // Other / Prefer not to say / Unspecified
+        $avatar_class = "avatar-neutral";
+        $avatar_icon  = '<i class="fas fa-user-astronaut"></i>';
+    }
+}
 ?>
 
 <!-- 1. Left Navigation Sidebar -->
@@ -160,9 +184,15 @@ $u_role_badge = ucwords(str_replace('_', ' ',$user_role));
 <!-- 2. Universal Integrated Top Header Bar -->
 <header id="appTopHeader" class="universal-top-header">
     <div class="header-user-group">
-        <div class="header-avatar" style="<?php if(!empty($u_data['profile_pic'])) echo "background-image: url('".$u_data['profile_pic']."');"; ?>">
-            <?php if(empty($u_data['profile_pic'])) echo$u_initials; ?>
-        </div>
+        <!-- Clickable Avatar leading directly to profile.php -->
+        <a href="profile.php" class="header-avatar-link" title="Click to view and edit profile">
+            <div class="header-avatar <?= $avatar_class ?>" style="<?= $avatar_style ?>">
+                <?php if (!$has_pic): ?>
+                    <?= $avatar_icon ?>
+                <?php endif; ?>
+            </div>
+        </a>
+
         <div class="header-user-meta">
             <h2><?= htmlspecialchars($u_data['fullname']) ?></h2>
             <div class="header-user-sub">
@@ -189,7 +219,7 @@ $u_role_badge = ucwords(str_replace('_', ' ',$user_role));
 
 <style>
 /* ==========================================================================
-   GLOBAL THEME VARIABLES & LAYOUT RESET
+   GLOBAL THEME VARIABLES & BASE LAYOUT
    ========================================================================== */
 :root {
     --bg-color: #f4f6f9;
@@ -250,7 +280,6 @@ body {
     gap: 16px !important;
 }
 
-/* Header adjusts when sidebar collapses */
 .sidebar.collapsed ~ .universal-top-header {
     margin-left: 70px !important;
 }
@@ -261,26 +290,57 @@ body {
     gap: 18px !important;
 }
 
-.header-avatar {
-    width: 64px !important;
-    height: 64px !important;
+/* Clickable Avatar Container */
+.header-avatar-link {
+    text-decoration: none !important;
+    display: inline-block !important;
     border-radius: 50% !important;
-    background: linear-gradient(135deg, #3498db, #2980b9) !important;
-    color: #ffffff !important;
-    font-size: 26px !important;
-    font-weight: 700 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    border: 3px solid #ffffff !important;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.12) !important;
-    background-size: cover !important;
-    background-position: center !important;
     flex-shrink: 0 !important;
 }
 
+.header-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid #ffffff;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.12);
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    cursor: pointer;
+}
+
+.header-avatar:hover {
+    transform: scale(1.06);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.22);
+}
+
 body.dark-mode .header-avatar {
-    border-color: #333333 !important;
+    border-color: #333333;
+}
+
+/* Gender-Based Fallbacks */
+.avatar-male {
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    color: #ffffff;
+}
+
+.avatar-female {
+    background: linear-gradient(135deg, #e84393, #fd79a8);
+    color: #ffffff;
+}
+
+.avatar-neutral {
+    background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+    color: #ffffff;
+}
+
+.header-avatar i {
+    font-size: 28px;
 }
 
 .header-user-meta h2 {
@@ -322,7 +382,7 @@ body.dark-mode .badge-role {
     margin-left: auto !important;
 }
 
-/* Live hh:mm:ss Clock Badge */
+/* Real-Time hh:mm:ss Clock */
 .header-live-clock {
     display: flex !important;
     flex-direction: column !important;
@@ -366,7 +426,7 @@ body.dark-mode .badge-role {
 }
 
 /* ==========================================================================
-   DASHBOARD & COMMON CARD STYLES (Restored)
+   DASHBOARD & COMMON CARD STYLES
    ========================================================================== */
 .stats-grid { 
     display: grid !important; 
@@ -570,6 +630,10 @@ tr:hover {
 .block-launcher-btn:hover {
     background-color: rgba(255, 255, 255, 0.12);
     transform: scale(1.05);
+}
+
+.block-cube-svg {
+    color: #ffffff;
 }
 
 .brand-title {
