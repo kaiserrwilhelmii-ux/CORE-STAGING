@@ -4,12 +4,11 @@ $user_role = $_SESSION['role'] ?? '';
 $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username'] ?? 'Administrator';
 ?>
 
-<!-- Gemini-Styled Sidebar with Block Ecosystem Launcher -->
+<!-- Gemini-Styled Sidebar with Block Ecosystem Launcher & AJAX Content Swapper -->
 <div id="appSidebar" class="sidebar">
     <!-- Header: Block Inc Logo Launcher, Title & Collapse Button -->
     <div class="sidebar-header">
         <div class="brand-info">
-            <!-- Clickable Block Inc Logo Button -->
             <button type="button" class="block-launcher-btn" id="blockLauncherBtn" title="Block Ecosystem Apps">
                 <!-- Block Inc 3D Isometric Cube Symbol -->
                 <svg class="block-cube-svg" width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -76,7 +75,7 @@ $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username']
         <?php endif; ?>
     </nav>
 
-    <!-- Bottom Logout Button -->
+    <!-- Bottom Logout Button (Direct Full Page Navigation) -->
     <div class="sidebar-footer">
         <a href="logout.php" class="logout-btn" title="Logout">
             <i class="nav-icon fas fa-sign-out-alt"></i>
@@ -85,7 +84,7 @@ $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username']
     </div>
 </div>
 
-<!-- Block Ecosystem Floating App Switcher Dropdown -->
+<!-- Block Ecosystem Floating Dropdown Menu -->
 <div id="blockAppMenu" class="block-app-dropdown">
     <div class="block-dropdown-header">
         <span>Connected Platforms</span>
@@ -102,7 +101,7 @@ $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username']
             </div>
             <div class="block-app-details">
                 <span class="app-name">Assembled</span>
-                <span class="app-subtext">Workforce & Schedule</span>
+                <span class="app-subtext">Workforce & Shifts</span>
             </div>
             <i class="fas fa-external-link-alt app-ext-icon"></i>
         </a>
@@ -177,13 +176,13 @@ body {
     min-height: 100vh;
 }
 
-/* 2. Main Content Layout Offset */
+/* 2. Main Content Layout Offset & Smooth Fade Transition */
 .main-content {
     margin-left: 260px !important;
     width: calc(100% - 260px) !important;
     padding: 30px !important;
     box-sizing: border-box !important;
-    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease !important;
 }
 
 .sidebar.collapsed ~ .main-content {
@@ -480,7 +479,7 @@ tr:hover {
     background-color: #e74c3c !important;
 }
 
-.sidebar.collapsed .brand-title,
+.sidebar.collapsed .brand-info,
 .sidebar.collapsed .nav-text {
     display: none !important;
 }
@@ -574,7 +573,6 @@ tr:hover {
     flex-shrink: 0;
 }
 
-/* Brand Colors */
 .app-bg-assembled { background: linear-gradient(135deg, #6366f1, #4f46e5); }
 .app-bg-docebo    { background: linear-gradient(135deg, #0066cc, #004080); }
 .app-bg-cashapp   { background: #00D632; }
@@ -609,27 +607,44 @@ tr:hover {
     const sidebar = document.getElementById('appSidebar');
     const toggleBtn = document.getElementById('sidebarToggle');
 
-    // 1. Immediately check and restore saved collapse state
+    // 1. Immediately restore collapse state from localStorage
     if (localStorage.getItem('sidebar_collapsed') === 'true' && sidebar) {
         sidebar.classList.add('collapsed');
     }
 
-    // 2. Save preference whenever the user clicks the toggle
+    // 2. Collapse Toggle Listener
     if (toggleBtn && sidebar) {
         toggleBtn.addEventListener('click', function () {
             sidebar.classList.toggle('collapsed');
-            const isCollapsed = sidebar.classList.contains('collapsed');
-            localStorage.setItem('sidebar_collapsed', isCollapsed ? 'true' : 'false');
+            localStorage.setItem('sidebar_collapsed', sidebar.classList.contains('collapsed') ? 'true' : 'false');
+            const appMenu = document.getElementById('blockAppMenu');
+            if (appMenu) appMenu.classList.remove('show');
         });
     }
 
-    // 3. Keep dark mode & Block Launcher intact
+    // 3. Immediately apply theme preference
     if (localStorage.getItem('theme') === 'dark') {
         document.body.classList.add('dark-mode');
     }
 
+    // 4. Global Dark Mode Toggle Listener
+    document.addEventListener('click', function (e) {
+        const themeBtn = e.target.closest('#themeToggle, .theme-toggle');
+        if (themeBtn) {
+            e.preventDefault();
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            themeBtn.innerHTML = isDark
+                ? '<i class="fas fa-sun"></i> Light Mode'
+                : '<i class="fas fa-moon"></i> Dark Mode';
+        }
+    });
+
+    // 5. Block Launcher Dropdown Popover
     const launcherBtn = document.getElementById('blockLauncherBtn');
     const appMenu = document.getElementById('blockAppMenu');
+
     if (launcherBtn && appMenu) {
         launcherBtn.addEventListener('click', function (e) {
             e.stopPropagation();
@@ -638,11 +653,133 @@ tr:hover {
             appMenu.style.left = Math.max(10, rect.left) + 'px';
             appMenu.classList.toggle('show');
         });
+
         document.addEventListener('click', function (e) {
             if (!appMenu.contains(e.target) && e.target !== launcherBtn) {
                 appMenu.classList.remove('show');
             }
         });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                appMenu.classList.remove('show');
+            }
+        });
     }
+
+    // 6. Format Date Helper
+    function refreshDate() {
+        const dateEl = document.getElementById('headerLiveDate') || document.getElementById('currentDate');
+        if (dateEl) {
+            const now = new Date();
+            dateEl.textContent = now.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        }
+    }
+    refreshDate();
+
+    // =========================================================================
+    // 7. SEAMLESS AJAX CONTENT SWAPPER (SPA Navigation)
+    // =========================================================================
+    document.addEventListener('click', function (e) {
+        const link = e.target.closest('.sidebar-nav a');
+        if (!link) return;
+
+        const href = link.getAttribute('href');
+        // Do not intercept logout, external links, or anchor hashes
+        if (!href || href === 'logout.php' || href.startsWith('http') || href.startsWith('#')) {
+            return;
+        }
+
+        e.preventDefault();
+
+        // Highlight selected nav item
+        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+        link.classList.add('active');
+
+        // Swap content
+        loadPage(href, true);
+    });
+
+    async function loadPage(url, pushState = true) {
+        const mainContainer = document.querySelector('.main-content');
+        if (!mainContainer) {
+            window.location.href = url;
+            return;
+        }
+
+        // Smooth subtle fade out
+        mainContainer.style.opacity = '0.4';
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                window.location.href = url;
+                return;
+            }
+
+            const htmlText = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(htmlText, 'text/html');
+
+            const newContent = doc.querySelector('.main-content');
+            if (newContent) {
+                // Swap the inner content
+                mainContainer.innerHTML = newContent.innerHTML;
+
+                // Update document title
+                if (doc.title) {
+                    document.title = doc.title;
+                }
+
+                // Update browser URL and history
+                if (pushState) {
+                    history.pushState({ url: url }, '', url);
+                }
+
+                // Execute any page-specific inline scripts in the new content
+                const inlineScripts = newContent.querySelectorAll('script');
+                inlineScripts.forEach(oldScript => {
+                    const newScript = document.createElement('script');
+                    Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                    newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                    document.body.appendChild(newScript);
+                    newScript.remove();
+                });
+
+                // Re-evaluate live date
+                refreshDate();
+            } else {
+                window.location.href = url;
+            }
+        } catch (err) {
+            window.location.href = url;
+        } finally {
+            mainContainer.style.opacity = '1';
+        }
+    }
+
+    // Handle Browser Back & Forward Buttons
+    window.addEventListener('popstate', function (e) {
+        const targetUrl = (e.state && e.state.url) ? e.state.url : window.location.pathname;
+        
+        // Sync active link in sidebar
+        document.querySelectorAll('.sidebar-nav a').forEach(a => {
+            if (a.getAttribute('href') === targetUrl || targetUrl.endsWith(a.getAttribute('href'))) {
+                a.classList.add('active');
+            } else {
+                a.classList.remove('active');
+            }
+        });
+
+        loadPage(targetUrl, false);
+    });
 })();
 </script>
