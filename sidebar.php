@@ -1,12 +1,34 @@
 <?php
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 $current_page = basename($_SERVER['PHP_SELF']);
-$user_role = $_SESSION['role'] ?? '';
-$user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username'] ?? 'Administrator';
+$user_role    =$_SESSION['role'] ?? 'user';
+$user_id      = intval($_SESSION['user_id'] ?? 0);
+
+// Live user data fetch (for photo, name, email)
+$u_data = [
+    'fullname'    => $_SESSION['fullname'] ?? 'User',
+    'username'    => $_SESSION['username'] ?? '',
+    'email'       => $_SESSION['email'] ?? '',
+    'profile_pic' => ''
+];
+
+if (isset($conn) &&$user_id > 0) {
+    $u_res =$conn->query("SELECT fullname, username, email, profile_pic FROM users WHERE id = $user_id LIMIT 1");
+    if ($u_res &&$u_res->num_rows > 0) {
+        $u_data =$u_res->fetch_assoc();
+    }
+}
+
+$u_initials   = strtoupper(substr($u_data['fullname'] ?? 'U', 0, 1));
+$u_role_badge = ucwords(str_replace('_', ' ',$user_role));
 ?>
 
-<!-- Gemini-Styled Sidebar with Block Ecosystem Launcher & AJAX Content Swapper -->
+<!-- 1. Left Navigation Sidebar -->
 <div id="appSidebar" class="sidebar">
-    <!-- Header: Block Inc Logo Launcher, Title & Collapse Button -->
+    <!-- Header: Block Inc Cube Launcher, Brand Title & Collapse Button -->
     <div class="sidebar-header">
         <div class="brand-info">
             <button type="button" class="block-launcher-btn" id="blockLauncherBtn" title="Block Ecosystem Apps">
@@ -75,7 +97,7 @@ $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username']
         <?php endif; ?>
     </nav>
 
-    <!-- Bottom Logout Button (Direct Full Page Navigation) -->
+    <!-- Logout Button -->
     <div class="sidebar-footer">
         <a href="logout.php" class="logout-btn" title="Logout">
             <i class="nav-icon fas fa-sign-out-alt"></i>
@@ -91,8 +113,7 @@ $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username']
         <span class="block-tag">Block Inc</span>
     </div>
     <div class="block-app-list">
-        
-        <!-- 1. Assembled -->
+        <!-- Assembled -->
         <a href="https://app.assembled.hq" target="_blank" rel="noopener noreferrer" class="block-app-card">
             <div class="app-icon-badge app-bg-assembled">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -101,12 +122,12 @@ $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username']
             </div>
             <div class="block-app-details">
                 <span class="app-name">Assembled</span>
-                <span class="app-subtext">Workforce & Shifts</span>
+                <span class="app-subtext">Workforce & Schedule</span>
             </div>
             <i class="fas fa-external-link-alt app-ext-icon"></i>
         </a>
 
-        <!-- 2. Docebo -->
+        <!-- Docebo -->
         <a href="https://docebo.com" target="_blank" rel="noopener noreferrer" class="block-app-card">
             <div class="app-icon-badge app-bg-docebo">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -120,7 +141,7 @@ $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username']
             <i class="fas fa-external-link-alt app-ext-icon"></i>
         </a>
 
-        <!-- 3. Cash App -->
+        <!-- Cash App -->
         <a href="https://cash.app" target="_blank" rel="noopener noreferrer" class="block-app-card">
             <div class="app-icon-badge app-bg-cashapp">
                 <svg width="22" height="22" viewBox="0 0 32 32" fill="none">
@@ -133,12 +154,43 @@ $user_name = $_SESSION['fullname'] ?? $_SESSION['name'] ?? $_SESSION['username']
             </div>
             <i class="fas fa-external-link-alt app-ext-icon"></i>
         </a>
-
     </div>
 </div>
 
+<!-- 2. Universal Integrated Top Header Bar -->
+<header id="appTopHeader" class="universal-top-header">
+    <div class="header-user-group">
+        <div class="header-avatar" style="<?php if(!empty($u_data['profile_pic'])) echo "background-image: url('".$u_data['profile_pic']."');"; ?>">
+            <?php if(empty($u_data['profile_pic'])) echo$u_initials; ?>
+        </div>
+        <div class="header-user-meta">
+            <h2><?= htmlspecialchars($u_data['fullname']) ?></h2>
+            <div class="header-user-sub">
+                <span class="badge-role"><?= htmlspecialchars($u_role_badge) ?></span>
+                <span><i class="fas fa-id-badge"></i> <?= htmlspecialchars($u_data['username']) ?></span>
+                <?php if(!empty($u_data['email'])): ?>
+                    <span><i class="fas fa-envelope"></i> <?= htmlspecialchars($u_data['email']) ?></span>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live hh:mm:ss Clock & Dark Mode Controls -->
+    <div class="header-tools-group">
+        <div id="liveClockWidget" class="header-live-clock">
+            <span class="clock-time"><i class="far fa-clock"></i> <span id="clockTimeVal">00:00:00 AM</span></span>
+            <span class="clock-date" id="clockDateVal">Loading...</span>
+        </div>
+        <button type="button" id="themeToggle" class="theme-toggle">
+            <i class="fas fa-moon"></i> Dark Mode
+        </button>
+    </div>
+</header>
+
 <style>
-/* 1. Theme Variables & Base Styles */
+/* ==========================================================================
+   GLOBAL THEME VARIABLES & LAYOUT RESET
+   ========================================================================== */
 :root {
     --bg-color: #f4f6f9;
     --text-color: #2c3e50;
@@ -176,13 +228,136 @@ body {
     min-height: 100vh;
 }
 
-/* 2. Main Content Layout Offset & Smooth Fade Transition */
+/* ==========================================================================
+   UNIVERSAL INTEGRATED TOP HEADER
+   ========================================================================== */
+.universal-top-header {
+    background: var(--card-bg) !important;
+    border-radius: 16px !important;
+    box-shadow: var(--card-shadow) !important;
+    border: 1px solid var(--border-color) !important;
+    padding: 20px 28px !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    margin-left: 260px !important;
+    margin-right: 30px !important;
+    margin-top: 25px !important;
+    margin-bottom: 25px !important;
+    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    box-sizing: border-box !important;
+    flex-wrap: wrap !important;
+    gap: 16px !important;
+}
+
+/* Header adjusts when sidebar collapses */
+.sidebar.collapsed ~ .universal-top-header {
+    margin-left: 70px !important;
+}
+
+.header-user-group {
+    display: flex !important;
+    align-items: center !important;
+    gap: 18px !important;
+}
+
+.header-avatar {
+    width: 64px !important;
+    height: 64px !important;
+    border-radius: 50% !important;
+    background: linear-gradient(135deg, #3498db, #2980b9) !important;
+    color: #ffffff !important;
+    font-size: 26px !important;
+    font-weight: 700 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 3px solid #ffffff !important;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.12) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    flex-shrink: 0 !important;
+}
+
+body.dark-mode .header-avatar {
+    border-color: #333333 !important;
+}
+
+.header-user-meta h2 {
+    margin: 0 !important;
+    font-size: 20px !important;
+    font-weight: 700 !important;
+    color: var(--text-color) !important;
+}
+
+.header-user-sub {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    margin-top: 5px !important;
+    font-size: 13px !important;
+    color: #888 !important;
+    flex-wrap: wrap !important;
+}
+
+.badge-role {
+    background-color: #e8f4fd !important;
+    color: #2980b9 !important;
+    padding: 3px 10px !important;
+    border-radius: 12px !important;
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+}
+
+body.dark-mode .badge-role {
+    background-color: rgba(52, 152, 219, 0.2) !important;
+    color: #a8c7fa !important;
+}
+
+.header-tools-group {
+    display: flex !important;
+    align-items: center !important;
+    gap: 16px !important;
+    margin-left: auto !important;
+}
+
+/* Live hh:mm:ss Clock Badge */
+.header-live-clock {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    line-height: 1.3 !important;
+}
+
+.clock-time {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    color: var(--text-color) !important;
+    letter-spacing: 0.5px !important;
+}
+
+.clock-date {
+    font-size: 12px !important;
+    color: #888 !important;
+}
+
+/* Hide any old manual duplicate headers inside pages */
+.main-content > .top-header, 
+.main-content > .top-banner-card, 
+.main-content > .profile-banner-card {
+    display: none !important;
+}
+
+/* ==========================================================================
+   MAIN CONTENT LAYOUT OFFSET
+   ========================================================================== */
 .main-content {
     margin-left: 260px !important;
     width: calc(100% - 260px) !important;
-    padding: 30px !important;
+    padding: 0 30px 40px !important;
     box-sizing: border-box !important;
-    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.15s ease !important;
+    transition: margin-left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 .sidebar.collapsed ~ .main-content {
@@ -190,54 +365,50 @@ body {
     width: calc(100% - 70px) !important;
 }
 
-/* 3. Header & Greeting Box */
-.top-header {
-    display: flex !important;
-    justify-content: space-between !important;
-    align-items: center !important;
-    margin-bottom: 30px !important;
-    background: var(--card-bg) !important;
-    padding: 20px 25px !important;
-    border-radius: 12px !important;
-    box-shadow: var(--card-shadow) !important;
+/* ==========================================================================
+   DASHBOARD & COMMON CARD STYLES (Restored)
+   ========================================================================== */
+.stats-grid { 
+    display: grid !important; 
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important; 
+    gap: 20px !important; 
+    margin-bottom: 25px !important; 
 }
 
-.greeting-box h2 {
-    margin: 0 !important;
-    font-size: 24px !important;
+.stat-card { 
+    background: var(--card-bg) !important; 
+    padding: 22px !important; 
+    border-radius: 12px !important; 
+    box-shadow: var(--card-shadow) !important; 
+    border: 1px solid var(--border-color) !important;
+    border-left: 5px solid !important; 
+}
+
+.stat-card h3 { 
+    margin: 0 !important; 
+    font-size: 28px !important; 
     font-weight: 700 !important;
-    color: var(--text-color) !important;
+    color: var(--text-color) !important; 
 }
 
-.date-box {
+.stat-card p { 
+    color: var(--text-color) !important; 
+    opacity: 0.7 !important; 
+    margin: 5px 0 0 !important; 
     font-size: 14px !important;
-    opacity: 0.7 !important;
-    margin-top: 5px !important;
-    color: var(--text-color) !important;
 }
 
-/* Dark Mode Toggle Button */
-.theme-toggle {
-    background: transparent !important;
-    border: 2px solid var(--text-color) !important;
-    color: var(--text-color) !important;
-    padding: 8px 16px !important;
-    border-radius: 20px !important;
-    cursor: pointer !important;
-    font-weight: 600 !important;
-    font-size: 13px !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    gap: 8px !important;
-    transition: all 0.2s ease !important;
+.dashboard-split { 
+    display: grid !important; 
+    grid-template-columns: 1fr 1fr !important; 
+    gap: 25px !important; 
+    margin-bottom: 25px !important; 
 }
 
-.theme-toggle:hover {
-    background: var(--text-color) !important;
-    color: var(--card-bg) !important;
+@media (max-width: 1000px) { 
+    .dashboard-split { grid-template-columns: 1fr !important; } 
 }
 
-/* 4. Cards & Tables */
 .card {
     background: var(--card-bg) !important;
     padding: 25px !important;
@@ -276,9 +447,11 @@ tr:hover {
     background-color: rgba(0, 0, 0, 0.015) !important;
 }
 
-/* 5. Buttons & Badges */
+/* ==========================================================================
+   BUTTONS, BADGES & CONTROLS
+   ========================================================================== */
 .btn {
-    padding: 8px 14px !important;
+    padding: 8px 16px !important;
     border: none !important;
     border-radius: 6px !important;
     cursor: pointer !important;
@@ -315,7 +488,29 @@ tr:hover {
 .bg-red { background-color: #e74c3c !important; }
 .bg-grey { background-color: #bdc3c7 !important; color: #ffffff !important; }
 
-/* 6. Sidebar Styles (Gemini Theme) */
+.theme-toggle {
+    background: transparent !important;
+    border: 2px solid var(--text-color) !important;
+    color: var(--text-color) !important;
+    padding: 8px 16px !important;
+    border-radius: 20px !important;
+    cursor: pointer !important;
+    font-weight: 600 !important;
+    font-size: 13px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    transition: all 0.2s ease !important;
+}
+
+.theme-toggle:hover {
+    background: var(--text-color) !important;
+    color: var(--card-bg) !important;
+}
+
+/* ==========================================================================
+   SIDEBAR & BLOCK ECOSYSTEM DROPDOWN
+   ========================================================================== */
 .sidebar {
     width: 260px !important;
     height: 100vh !important;
@@ -358,7 +553,6 @@ tr:hover {
     white-space: nowrap;
 }
 
-/* Block Inc Logo Launcher Button */
 .block-launcher-btn {
     background: transparent;
     border: none;
@@ -376,11 +570,6 @@ tr:hover {
 .block-launcher-btn:hover {
     background-color: rgba(255, 255, 255, 0.12);
     transform: scale(1.05);
-}
-
-.block-cube-svg {
-    color: #ffffff;
-    transition: stroke 0.2s;
 }
 
 .brand-title {
@@ -475,10 +664,6 @@ tr:hover {
     transition: background-color 0.2s ease !important;
 }
 
-.sidebar .logout-btn:hover {
-    background-color: #e74c3c !important;
-}
-
 .sidebar.collapsed .brand-info,
 .sidebar.collapsed .nav-text {
     display: none !important;
@@ -495,7 +680,7 @@ tr:hover {
     padding: 12px 0 !important;
 }
 
-/* 7. Block Ecosystem Floating Dropdown Menu */
+/* Block Ecosystem Dropdown */
 .block-app-dropdown {
     display: none;
     position: fixed;
@@ -510,9 +695,7 @@ tr:hover {
     animation: blockPop 0.18s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-.block-app-dropdown.show {
-    display: block;
-}
+.block-app-dropdown.show { display: block; }
 
 @keyframes blockPop {
     from { opacity: 0; transform: translateY(-6px) scale(0.97); }
@@ -529,7 +712,6 @@ tr:hover {
     font-weight: 600;
     color: #a8c7fa;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
 }
 
 .block-tag {
@@ -540,12 +722,7 @@ tr:hover {
     border-radius: 4px;
 }
 
-.block-app-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 8px;
-}
+.block-app-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 
 .block-app-card {
     display: flex;
@@ -558,10 +735,7 @@ tr:hover {
     transition: background-color 0.15s ease, transform 0.15s ease;
 }
 
-.block-app-card:hover {
-    background-color: rgba(255, 255, 255, 0.08);
-    transform: translateX(3px);
-}
+.block-app-card:hover { background-color: rgba(255, 255, 255, 0.08); transform: translateX(3px); }
 
 .app-icon-badge {
     width: 38px;
@@ -577,29 +751,10 @@ tr:hover {
 .app-bg-docebo    { background: linear-gradient(135deg, #0066cc, #004080); }
 .app-bg-cashapp   { background: #00D632; }
 
-.block-app-details {
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
-    overflow: hidden;
-}
-
-.app-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #ffffff;
-}
-
-.app-subtext {
-    font-size: 11px;
-    color: #9aa0a6;
-}
-
-.app-ext-icon {
-    font-size: 11px;
-    color: #666;
-    margin-right: 4px;
-}
+.block-app-details { display: flex; flex-direction: column; flex-grow: 1; }
+.app-name { font-size: 14px; font-weight: 600; color: #ffffff; }
+.app-subtext { font-size: 11px; color: #9aa0a6; }
+.app-ext-icon { font-size: 11px; color: #666; margin-right: 4px; }
 </style>
 
 <script>
@@ -612,7 +767,7 @@ tr:hover {
         sidebar.classList.add('collapsed');
     }
 
-    // 2. Collapse Toggle Listener
+    // 2. Collapse Toggle Handler
     if (toggleBtn && sidebar) {
         toggleBtn.addEventListener('click', function () {
             sidebar.classList.toggle('collapsed');
@@ -641,7 +796,7 @@ tr:hover {
         }
     });
 
-    // 5. Block Launcher Dropdown Popover
+    // 5. Block Launcher Popover Logic
     const launcherBtn = document.getElementById('blockLauncherBtn');
     const appMenu = document.getElementById('blockAppMenu');
 
@@ -667,119 +822,34 @@ tr:hover {
         });
     }
 
-    // 6. Format Date Helper
-    function refreshDate() {
-        const dateEl = document.getElementById('headerLiveDate') || document.getElementById('currentDate');
-        if (dateEl) {
-            const now = new Date();
-            dateEl.textContent = now.toLocaleDateString('en-US', {
-                weekday: 'short',
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
-            });
-        }
-    }
-    refreshDate();
-
     // =========================================================================
-    // 7. SEAMLESS AJAX CONTENT SWAPPER (SPA Navigation)
+    // 6. REAL-TIME TICKING CLOCK WITH hh:mm:ss
     // =========================================================================
-    document.addEventListener('click', function (e) {
-        const link = e.target.closest('.sidebar-nav a');
-        if (!link) return;
+    function updateClock() {
+        const timeEl = document.getElementById('clockTimeVal');
+        const dateEl = document.getElementById('clockDateVal');
+        if (!timeEl || !dateEl) return;
 
-        const href = link.getAttribute('href');
-        // Do not intercept logout, external links, or anchor hashes
-        if (!href || href === 'logout.php' || href.startsWith('http') || href.startsWith('#')) {
-            return;
-        }
-
-        e.preventDefault();
-
-        // Highlight selected nav item
-        document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
-        link.classList.add('active');
-
-        // Swap content
-        loadPage(href, true);
-    });
-
-    async function loadPage(url, pushState = true) {
-        const mainContainer = document.querySelector('.main-content');
-        if (!mainContainer) {
-            window.location.href = url;
-            return;
-        }
-
-        // Smooth subtle fade out
-        mainContainer.style.opacity = '0.4';
-
-        try {
-            const response = await fetch(url);
-            if (!response.ok) {
-                window.location.href = url;
-                return;
-            }
-
-            const htmlText = await response.text();
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(htmlText, 'text/html');
-
-            const newContent = doc.querySelector('.main-content');
-            if (newContent) {
-                // Swap the inner content
-                mainContainer.innerHTML = newContent.innerHTML;
-
-                // Update document title
-                if (doc.title) {
-                    document.title = doc.title;
-                }
-
-                // Update browser URL and history
-                if (pushState) {
-                    history.pushState({ url: url }, '', url);
-                }
-
-                // Execute any page-specific inline scripts in the new content
-                const inlineScripts = newContent.querySelectorAll('script');
-                inlineScripts.forEach(oldScript => {
-                    const newScript = document.createElement('script');
-                    Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
-                    newScript.appendChild(document.createTextNode(oldScript.innerHTML));
-                    document.body.appendChild(newScript);
-                    newScript.remove();
-                });
-
-                // Re-evaluate live date
-                refreshDate();
-            } else {
-                window.location.href = url;
-            }
-        } catch (err) {
-            window.location.href = url;
-        } finally {
-            mainContainer.style.opacity = '1';
-        }
-    }
-
-    // Handle Browser Back & Forward Buttons
-    window.addEventListener('popstate', function (e) {
-        const targetUrl = (e.state && e.state.url) ? e.state.url : window.location.pathname;
+        const now = new Date();
         
-        // Sync active link in sidebar
-        document.querySelectorAll('.sidebar-nav a').forEach(a => {
-            if (a.getAttribute('href') === targetUrl || targetUrl.endsWith(a.getAttribute('href'))) {
-                a.classList.add('active');
-            } else {
-                a.classList.remove('active');
-            }
-        });
+        let hours = now.getHours();
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        
+        hours = hours % 12;
+        hours = hours ? String(hours).padStart(2, '0') : '12';
 
-        loadPage(targetUrl, false);
-    });
+        timeEl.textContent = `${hours}:${minutes}:${seconds} ${ampm}`;
+        dateEl.textContent = now.toLocaleDateString('en-US', {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    }
+
+    updateClock();
+    setInterval(updateClock, 1000);
 })();
 </script>
