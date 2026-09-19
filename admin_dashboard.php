@@ -79,9 +79,6 @@ $supervisors = $conn->query($sql_supervisors);
 
     <!-- Main Content Container (Wraps the ENTIRE page) -->
     <div class="main-content">
-        
-        <!-- Universal Top Header Banner -->
-        <?php include 'header.php'; ?>
 
         <?php if($reset_count > 0): ?>
         <div class="card" style="background: #fff5f5; border-left: 5px solid #e74c3c; border-radius: 8px; margin-bottom: 25px; display:flex; justify-content:space-between; align-items:center;">
