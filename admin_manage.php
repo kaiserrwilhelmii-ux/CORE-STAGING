@@ -53,13 +53,8 @@ if ($display_name === 'Aljon Timbreza' || $display_name === 'Super Admin') {
 
     <div class="main-content">
         
-        <div class="top-header">
-            <div class="greeting-box">
-                <h2><span id="greetingText">Welcome,</span> <?php echo htmlspecialchars($display_name); ?></h2>
-                <div id="currentDate" class="date-box">Loading date...</div>
-            </div>
-            <button id="themeToggle" class="theme-toggle"><i class="fas fa-moon"></i> Dark Mode</button>
-        </div>
+        <!-- Universal Top Header Banner -->
+        <?php include 'header.php'; ?>
 
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
             <h2 class="header-title" style="margin-bottom:0;">User Management</h2>
