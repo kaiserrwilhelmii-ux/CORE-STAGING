@@ -16,10 +16,10 @@ $u_data = [
     'profile_pic' => ''
 ];
 
-if (isset($conn) &&$user_id > 0) {
-    $u_res =$conn->query("SELECT fullname, username, email, gender, profile_pic FROM users WHERE id = $user_id LIMIT 1");
-    if ($u_res &&$u_res->num_rows > 0) {
-        $u_data =$u_res->fetch_assoc();
+if (isset($conn) && $user_id > 0) {
+    $u_res = $conn->query("SELECT u.fullname, u.username, u.email, u.gender, u.profile_pic, s.fullname as supervisor_name FROM users u LEFT JOIN users s ON u.assigned_supervisor_id = s.id WHERE u.id = $user_id LIMIT 1");
+    if ($u_res && $u_res->num_rows > 0) {
+        $u_data = $u_res->fetch_assoc();
     }
 }
 
