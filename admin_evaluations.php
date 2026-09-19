@@ -35,9 +35,8 @@ $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : 0;
     <?php include 'sidebar.php'; ?>
     <div class="main-content">
         <?php if ($student_id == 0): ?>
-            <div class="top-header" style="background:#fff; padding:15px 20px; border-radius:8px; margin-bottom:20px; box-shadow:0 2px 5px rgba(0,0,0,0.05);">
-                <h2 style="margin:0;"><i class="fas fa-users"></i> Master Student Directory</h2>
-            </div>
+        <?php include 'header.php'; ?>
+
             
             <div class="card">
                 <h3>Select a Student to view their Scorecard</h3>
