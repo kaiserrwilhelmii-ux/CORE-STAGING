@@ -677,11 +677,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                                 <input type="email" class="form-control" value="<?= htmlspecialchars($user['email'] ?? '') ?>" disabled>
                             </div>
                             
-                            <?php if ($role === 'student_teacher'): ?>
-                            <div class="form-group full-width">
-                                <label>Assigned Supervising Teacher</label>
-                                <input type="text" class="form-control" value="<?= htmlspecialchars($user['supervisor_name'] ?? 'Not Assigned Yet') ?>" disabled>
+                        <?php if ($role === 'student_teacher'): ?>
+                            <div class="form-group full-width" style="background: rgba(52, 152, 219, 0.08); padding: 15px 20px; border-radius: 10px; border-left: 4px solid var(--btn-primary); margin-top: 15px;">
+                                <label style="color: var(--btn-primary); font-weight: 700; margin-bottom: 4px;">
+                                    <i class="fas fa-user-tie"></i> Assigned Supervising Teacher (Cooperating Teacher)
+                                 </label>
+                                <div style="font-size: 15px; font-weight: 600; color: var(--text-color);">
+                                 <?= htmlspecialchars($user['supervisor_name'] ?? 'Not Assigned Yet') ?>
+                                </div>
                             </div>
+                        <?php endif; ?>
+
                             <div class="form-group full-width">
                                 <label>Practice Teaching Partner School</label>
                                 <input type="text" class="form-control" value="<?= htmlspecialchars($user['partner_school'] ?? 'Unassigned') ?>" disabled>
