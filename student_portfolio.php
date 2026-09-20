@@ -180,7 +180,7 @@ if ($portfolio_id > 0) {
 }
 
 // -------------------------------------------------------------
-// 6. INSTANT ASYNC FILE UPLOAD (Syncs file for Copilot without page reload)
+// 6. INSTANT ASYNC FILE UPLOAD (Background Sync for Copilot)
 // -------------------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['ajax_file_upload']) && $portfolio_id > 0) {
     header('Content-Type: application/json');
@@ -232,7 +232,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_portfolio']) && $
 }
 
 // -------------------------------------------------------------
-// 8. ACTION: AI Copilot Evaluation & Chat
+// 8. ACTION: AI Copilot (General Mentor Chat + 100-Point Rubric)
 // -------------------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portfolio_id > 0) {
     $user_msg     = trim($_POST['message'] ?? '');
@@ -254,6 +254,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             'time'    => date('h:i A')
         ];
 
+        // Extract text from attached artifact file (if any)
         $file_context_str = "";
         if (!empty($portfolio['file_path'])) {
             $extractedText = extractFileTextContent($portfolio['file_path']);
@@ -264,20 +265,39 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             }
         }
 
-        $ai_prompt = "You are an expert Academic Copilot and Teacher Education Mentor for Pre-Service Teachers.\n"
-                   . "100-Point PPST Rubric Standards:\n"
-                   . "1. Objectives (20 pts): Specific, Measurable, HOTS-aligned (Bloom's Taxonomy).\n"
-                   . "2. Content (20 pts): Accurate subject matter aligned with curriculum.\n"
-                   . "3. Methodology (30 pts): Active student-centered pedagogy and instructional flow.\n"
-                   . "4. Assessment (20 pts): Formative/summative tools aligned with objectives.\n"
-                   . "5. Formatting & Mechanics (10 pts): Professional documentation.\n\n"
-                   . "Portfolio Title: $current_ttl\n"
-                   . "Typed Lesson Plan / Procedures:\n" . ($current_desc ?: "(No typed text provided; evaluate the attached document below)") . "\n"
-                   . $file_context_str . "\n"
-                   . "User Inquiry: $user_msg\n\n"
-                   . "IMPORTANT: If an attached artifact is provided above, thoroughly read and evaluate its contents.";
+        // Distinct Prompts: Official Rubric vs General Academic Chat
+        if ($auto_eval) {
+            // Mode 1: 100-Point Rubric Scoring
+            $ai_prompt = "You are an expert Academic Evaluator for pre-service teachers.\n"
+                       . "Task: Evaluate this lesson plan/portfolio submission against the 100-Point PPST Rubric:\n"
+                       . "1. Objectives (20 pts): Specific, Measurable, HOTS-aligned (Bloom's Taxonomy).\n"
+                       . "2. Content (20 pts): Accurate subject matter aligned with curriculum.\n"
+                       . "3. Methodology (30 pts): Active student-centered pedagogy and instructional flow.\n"
+                       . "4. Assessment (20 pts): Formative/summative tools aligned with objectives.\n"
+                       . "5. Formatting & Mechanics (10 pts): Professional documentation.\n\n"
+                       . "Portfolio Title: $current_ttl\n"
+                       . "Lesson Content / Procedures:\n" . ($current_desc ?: "(No text entered in editor)") . "\n"
+                       . $file_context_str . "\n\n"
+                       . "Provide an estimated score out of 100, classify as [GREAT: 90-100], [GOOD: 75-89], or [NEEDS REVISION: <75], and provide actionable advice. If no content is attached at all, invite the student to add their materials.";
+        } else {
+            // Mode 2: General Mentor / Questions Outside of Grading
+            $ai_prompt = "You are a supportive, knowledgeable Academic Copilot and Teacher Education Mentor for Pre-Service Teachers.\n"
+                       . "The student is asking you a question. You are fully capable of answering ANY question outside of just grading, including:\n"
+                       . "- General teaching methods, lesson planning ideas, learning objectives (Bloom's Taxonomy), pedagogical approaches.\n"
+                       . "- Explaining concepts in education, subject matter explanations, classroom management, or assessment design.\n"
+                       . "- Answering general questions, brainstorming, or having friendly professional conversation.\n\n"
+                       . "Workspace Context (Reference only if relevant):\n"
+                       . "- Portfolio Title: " . ($current_ttl ?: "Untitled") . "\n"
+                       . "- Lesson Content: " . ($current_desc ?: "None typed yet") . "\n"
+                       . ($file_context_str ? "- Attached File:\n" . $file_context_str . "\n" : "") . "\n"
+                       . "Student's Message: \"$user_msg\"\n\n"
+                       . "RULES:\n"
+                       . "1. Answer the student's question directly, clearly, and supportively.\n"
+                       . "2. Do NOT demand a lesson plan or refuse to answer if no files are uploaded. Answer their question naturally!\n"
+                       . "3. Keep your tone encouraging and professional.";
+        }
 
-        $ai_reply = "Hello! I reviewed your submission and attached materials.";
+        $ai_reply = "Hello! How can I assist you with your teaching practice today?";
         if (function_exists('generateAIResponse')) {
             $ai_reply = generateAIResponse($ai_prompt, 'mentor');
         }
@@ -336,16 +356,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             margin: 0;
             padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            min-height: 100vh;
-        }
-
-        /* Content Area */
-        .main-content {
-            margin-left: 250px;
-            padding: 24px 30px;
-            width: calc(100% - 250px);
-            box-sizing: border-box;
             min-height: 100vh;
         }
 
@@ -356,6 +366,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             gap: 20px;
             align-items: stretch;
             min-height: calc(100vh - 220px);
+            width: 100%;
+            box-sizing: border-box;
         }
 
         @media (max-width: 1280px) {
@@ -448,7 +460,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             font-family: inherit;
         }
 
-        /* Content Container with Background */
         .content-builder-container {
             background: linear-gradient(180deg, rgba(79, 70, 229, 0.02) 0%, rgba(0, 0, 0, 0.02) 100%);
             border: 1px solid var(--border-color);
@@ -491,7 +502,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
         }
 
-        /* Aesthetic Lined Notebook Paper */
         .lined-paper-wrapper {
             background: #fdfbf7;
             border-radius: 10px;
@@ -547,7 +557,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             padding: 16px;
         }
 
-        /* Copilot Sidebar (Right) */
         .copilot-header {
             background: linear-gradient(135deg, #4f46e5, #7c3aed);
             color: #ffffff;
@@ -615,7 +624,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         .badge-pending { background-color: #cce5ff; color: #004085; }
         .badge-graded { background-color: #d4edda; color: #155724; }
 
-        /* Fullscreen Copilot Loading Overlay */
         .copilot-loading-overlay {
             position: fixed;
             top: 0;
@@ -662,14 +670,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
 </head>
 <body>
 
-    <!-- Loading Screen -->
+    <!-- Fullscreen Copilot Loading Overlay -->
     <div id="copilotLoadingOverlay" class="copilot-loading-overlay">
         <div class="loading-dialog">
             <div class="spinner-ring"></div>
             <i class="fas fa-robot" style="font-size: 32px; color: var(--primary-accent);"></i>
-            <h3 style="margin: 0; font-size: 18px;">Copilot is Analyzing...</h3>
+            <h3 style="margin: 0; font-size: 18px;">Copilot is Thinking...</h3>
             <p style="margin: 0; font-size: 13px; opacity: 0.8; line-height: 1.5;">
-                Reading your lesson objectives, rubrics, and scanning submitted files. Please wait.
+                Analyzing your question and reviewing lesson materials. Please wait.
             </p>
         </div>
     </div>
@@ -680,10 +688,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
     <!-- 2. Main Content Area -->
     <div class="main-content">
 
-        <!-- 3. Unified Top Header Component -->
+        <!-- 3. Unified Top Header Component (Correctly placed above the grid) -->
         <?php include __DIR__ . '/header.php'; ?>
 
-        <!-- Back Button & Status Bar -->
+        <!-- Action Bar: Back Button & Mode Status -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;">
             <a href="student_portfolio.php" class="btn" style="background:#334155; color:white; padding:8px 16px; border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
                 <i class="fas fa-arrow-left"></i> Back to All Portfolios
@@ -706,10 +714,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             </div>
         <?php endif; ?>
 
-        <!-- 3-Column Studio Grid -->
+        <!-- 4. The 3-Column Studio Grid -->
         <div class="workspace-grid">
             
-            <!-- LEFT COLUMN: Submissions History -->
+            <!-- COLUMN 1: Submissions History Drawer -->
             <div class="studio-card">
                 <div class="drawer-header">
                     <strong style="font-size:14px;"><i class="fas fa-folder-open"></i> My Portfolios</strong>
@@ -749,7 +757,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                 </div>
             </div>
 
-            <!-- CENTER COLUMN: Workspace -->
+            <!-- COLUMN 2: Workspace Editor -->
             <div class="studio-card">
                 <?php if ($portfolio): ?>
                     <div class="workspace-body">
@@ -797,7 +805,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                         </button>
                                     </div>
 
-                                    <!-- Option A: File Upload & Work Viewer -->
+                                    <!-- Option A: File Upload & In-Page Viewer -->
                                     <div id="sectionUploadOption" style="display:block;">
                                         <div class="dropzone-box">
                                             <i class="fas fa-cloud-upload-alt" style="font-size:36px; color:var(--primary-accent); margin-bottom:10px;"></i>
@@ -839,7 +847,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                         </div>
                                     </div>
 
-                                    <!-- Option B: Aesthetic Lined Notebook Paper Editor -->
+                                    <!-- Option B: Lined Paper Text Editor -->
                                     <div id="sectionTypeOption" style="display:none;">
                                         <div class="lined-paper-wrapper">
                                             <textarea name="description" id="editorContent" class="lined-paper-textarea" rows="14" 
@@ -886,7 +894,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                 <?php endif; ?>
             </div>
 
-            <!-- RIGHT COLUMN: 100-Point Copilot -->
+            <!-- COLUMN 3: 100-Point Copilot -->
             <div class="studio-card">
                 <div class="copilot-header">
                     <div style="display:flex; align-items:center; gap:8px;">
@@ -924,7 +932,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                     ?>
                         <div class="chat-bubble ai">
                             <div style="font-size:10px; opacity:0.75; margin-bottom:4px;">AI Copilot</div>
-                            <div>Hello! I can read your attached documents (.docx, .xlsx, .pdf, images) and evaluate your lesson against the 100-point PPST rubric. Click <strong>"Evaluate 100-Pts"</strong> or ask any question!</div>
+                            <div>Hello! I can answer any questions you have about teaching, objectives, or pedagogy. When you are ready for grading, click <strong>"Evaluate 100-Pts"</strong>!</div>
                         </div>
                     <?php endif; ?>
                 </div>
@@ -933,7 +941,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                     <form method="POST" class="copilot-input-bar copilot-submit-trigger" id="copilotForm">
                         <input type="hidden" name="context_title" value="<?= htmlspecialchars($portfolio['title'] ?? '') ?>">
                         <input type="hidden" name="context_description" id="hiddenContextDescription" value="<?= htmlspecialchars($portfolio['description'] ?? '') ?>">
-                        <input type="text" name="message" class="form-control" placeholder="Ask Copilot for feedback..." required style="border-radius:20px; padding:10px 14px; font-size:13px;">
+                        <input type="text" name="message" class="form-control" placeholder="Ask Copilot anything..." required style="border-radius:20px; padding:10px 14px; font-size:13px;">
                         <button type="submit" name="send_chat" style="background:var(--primary-accent); color:white; border-radius:50%; width:36px; height:36px; border:none; cursor:pointer; flex-shrink:0;">
                             <i class="fas fa-paper-plane"></i>
                         </button>
@@ -993,7 +1001,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             previewTarget.innerHTML = '<div style="background:var(--card-bg); padding:16px; border-radius:6px; border:1px solid var(--border-color); font-size:13px;">'
                                     + '<i class="fas fa-file-alt" style="font-size:24px; color:var(--primary-accent); margin-right:8px;"></i>'
                                     + '<strong>Selected Document: ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)</strong>'
-                                    + '<p style="margin:8px 0 0; opacity:0.75;">Document selected. Syncing with Copilot...</p>'
+                                    + '<p style="margin:8px 0 0; opacity:0.75;">Document loaded. Uploading to server...</p>'
                                     + '</div>';
         }
 
@@ -1013,7 +1021,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         .then(data => {
             if (data.success) {
                 if (statusBadge) {
-                    statusBadge.innerHTML = '<span style="color:#16a34a;"><i class="fas fa-check-circle"></i> File uploaded & saved! Copilot can now evaluate it.</span>';
+                    statusBadge.innerHTML = '<span style="color:#16a34a;"><i class="fas fa-check-circle"></i> File uploaded & saved! Copilot can now read it.</span>';
                 }
                 const openLink = document.getElementById('fileOpenLink');
                 if (openLink && data.file_path) {
