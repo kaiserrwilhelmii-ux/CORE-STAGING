@@ -8,41 +8,68 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student_teacher') {
     exit(); 
 }
 
-$user_id  = intval($_SESSION['user_id']);
-$fullname = $_SESSION['fullname'] ?? 'Student Teacher';
-$username = $_SESSION['username'] ?? 'student';
-$email    = $_SESSION['email'] ?? '';
+$user_id = intval($_SESSION['user_id']);
+
+// -------------------------------------------------------------
+// 0. FETCH USER DETAILS FROM DATABASE (Persists across redeploys)
+// -------------------------------------------------------------
+$user_stmt = $conn->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
+$user_stmt->bind_param("i", $user_id);
+$user_stmt->execute();
+$user_row = $user_stmt->get_result()->fetch_assoc();
+
+$fullname = !empty($user_row['fullname']) ? $user_row['fullname'] : ($_SESSION['fullname'] ?? 'Student Teacher');
+$username = !empty($user_row['username']) ? $user_row['username'] : ($_SESSION['username'] ?? 'student');
+$email    = !empty($user_row['email']) ? $user_row['email'] : ($_SESSION['email'] ?? '');
 $msg      = isset($_GET['msg']) ? trim($_GET['msg']) : "";
-$error    = "";
 
 // -------------------------------------------------------------
 // HELPER: Extract text content from submitted files (DOCX, XLSX, PDF, TXT)
 // -------------------------------------------------------------
 function extractFileTextContent($filePath) {
-    if (!file_exists($filePath)) return "";
-    $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+    if (empty($filePath)) return "";
+    $fullPath = $filePath;
+    if (!file_exists($fullPath)) {
+        $fullPath = __DIR__ . '/' . ltrim($filePath, '/');
+    }
+    if (!file_exists($fullPath)) return "";
+
+    $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
     
+    // Plain Text, Markdown, CSV, HTML
     if (in_array($ext, ['txt', 'md', 'csv', 'html', 'json'])) {
-        return substr(file_get_contents($filePath), 0, 7000);
+        return substr(file_get_contents($fullPath), 0, 7000);
     }
     
-    if ($ext === 'docx' && class_exists('ZipArchive')) {
-        $zip = new ZipArchive();
-        if ($zip->open($filePath) === TRUE) {
-            $xmlIndex = $zip->locateName('word/document.xml');
-            if ($xmlIndex !== false) {
-                $xml = $zip->getFromIndex($xmlIndex);
+    // Microsoft Word (.docx)
+    if ($ext === 'docx') {
+        if (class_exists('ZipArchive')) {
+            $zip = new ZipArchive();
+            if ($zip->open($fullPath) === TRUE) {
+                $xmlIndex = $zip->locateName('word/document.xml');
+                if ($xmlIndex !== false) {
+                    $xml = $zip->getFromIndex($xmlIndex);
+                    $zip->close();
+                    $cleanText = str_replace(['</w:p>', '</w:r>', '<w:tab/>'], ["\n", "", "\t"], $xml);
+                    return substr(strip_tags($cleanText), 0, 7000);
+                }
                 $zip->close();
-                $cleanText = str_replace(['</w:p>', '</w:r>', '<w:tab/>'], ["\n", "", "\t"], $xml);
+            }
+        }
+        // Fallback using unzip command if available
+        if (function_exists('shell_exec')) {
+            $out = @shell_exec("unzip -p " . escapeshellarg($fullPath) . " word/document.xml 2>/dev/null");
+            if (!empty($out)) {
+                $cleanText = str_replace(['</w:p>', '</w:r>', '<w:tab/>'], ["\n", "", "\t"], $out);
                 return substr(strip_tags($cleanText), 0, 7000);
             }
-            $zip->close();
         }
     }
     
+    // Microsoft Excel (.xlsx / .xlxx)
     if (in_array($ext, ['xlsx', 'xlxx']) && class_exists('ZipArchive')) {
         $zip = new ZipArchive();
-        if ($zip->open($filePath) === TRUE) {
+        if ($zip->open($fullPath) === TRUE) {
             $xmlIndex = $zip->locateName('xl/sharedStrings.xml');
             if ($xmlIndex !== false) {
                 $xml = $zip->getFromIndex($xmlIndex);
@@ -54,22 +81,29 @@ function extractFileTextContent($filePath) {
         }
     }
     
+    // Adobe PDF (.pdf)
     if ($ext === 'pdf') {
-        $content = @file_get_contents($filePath);
+        if (function_exists('shell_exec')) {
+            $out = @shell_exec("pdftotext " . escapeshellarg($fullPath) . " - 2>/dev/null");
+            if (!empty(trim($out))) {
+                return substr(trim($out), 0, 7000);
+            }
+        }
+        $content = @file_get_contents($fullPath);
         if ($content && preg_match_all('/\((.*?)\)\s*T[jJ]/s', $content, $matches)) {
             $extracted = implode(' ', $matches);
             if (!empty(trim($extracted))) {
                 return substr($extracted, 0, 7000);
             }
         }
-        return "[Attached PDF: " . basename($filePath) . "]";
+        return "[Attached PDF Document: " . basename($fullPath) . "]";
     }
     
     if (in_array($ext, ['jpg', 'jpeg', 'png', 'webp', 'gif'])) {
-        return "[Visual Media Evidence Attached: " . basename($filePath) . "]";
+        return "[Visual Media Evidence Attached: " . basename($fullPath) . "]";
     }
     
-    return "[Attached File: " . basename($filePath) . "]";
+    return "[Attached File: " . basename($fullPath) . "]";
 }
 
 // -------------------------------------------------------------
@@ -86,16 +120,17 @@ if (isset($_GET['action']) && $_GET['action'] === 'new') {
 }
 
 // -------------------------------------------------------------
-// 2. ACTION: Delete Draft Portfolio
+// 2. ACTION: Delete Draft Portfolio (FIXED: Handles both POST and GET IDs)
 // -------------------------------------------------------------
 if (isset($_POST['delete_draft'])) {
-    $del_id = intval($_POST['portfolio_id']);
-    $stmt = $conn->prepare("DELETE FROM submissions WHERE id=? AND user_id=? AND status='draft'");
-    $stmt->bind_param("ii", $del_id, $user_id);
-    if ($stmt->execute()) {
-        header("Location: student_portfolio.php?msg=" . urlencode("Draft portfolio deleted."));
-        exit();
+    $del_id = intval($_POST['portfolio_id'] ?? ($_GET['id'] ?? 0));
+    if ($del_id > 0) {
+        $stmt = $conn->prepare("DELETE FROM submissions WHERE id=? AND user_id=? AND status='draft'");
+        $stmt->bind_param("ii", $del_id, $user_id);
+        $stmt->execute();
     }
+    header("Location: student_portfolio.php?msg=" . urlencode("Draft portfolio deleted successfully."));
+    exit();
 }
 
 // -------------------------------------------------------------
@@ -117,7 +152,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'revise') {
 }
 
 // -------------------------------------------------------------
-// 4. FETCH ALL SUBMISSIONS (For Drawer)
+// 4. FETCH ALL SUBMISSIONS
 // -------------------------------------------------------------
 $all_submissions = [];
 $res = $conn->query("
@@ -162,7 +197,32 @@ if ($portfolio_id > 0) {
 }
 
 // -------------------------------------------------------------
-// 6. ACTION: Save Draft or Submit Portfolio
+// 6. INSTANT ASYNC FILE UPLOADER (Auto-syncs file so Copilot can read it immediately)
+// -------------------------------------------------------------
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['ajax_file_upload']) && $portfolio_id > 0) {
+    header('Content-Type: application/json');
+    if (!empty($_FILES['file']['name'])) {
+        $target_dir = __DIR__ . "/uploads/";
+        if (!is_dir($target_dir)) { mkdir($target_dir, 0777, true); }
+        $clean_name = preg_replace("/[^a-zA-Z0-9._-]/", "", basename($_FILES["file"]["name"]));
+        $filename   = $user_id . "_evidence_" . time() . "_" . $clean_name;
+        $target_file = $target_dir . $filename;
+        $rel_path    = "uploads/" . $filename;
+        
+        if (move_uploaded_file($_FILES["file"]["tmp_name"], $target_file)) {
+            $stmt = $conn->prepare("UPDATE submissions SET file_path=? WHERE id=? AND user_id=?");
+            $stmt->bind_param("sii", $rel_path, $portfolio_id, $user_id);
+            $stmt->execute();
+            echo json_encode(['success' => true, 'file_path' => $rel_path]);
+            exit();
+        }
+    }
+    echo json_encode(['success' => false]);
+    exit();
+}
+
+// -------------------------------------------------------------
+// 7. ACTION: Save Draft or Submit Portfolio
 // -------------------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_portfolio']) && $portfolio_id > 0 && !$is_graded) {
     $title_val  = trim($_POST['title'] ?? 'Untitled Portfolio');
@@ -171,11 +231,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_portfolio']) && $
     
     $target_file = $portfolio['file_path'] ?? '';
     if (!empty($_FILES['file']['name'])) {
-        $target_dir = "uploads/";
+        $target_dir = __DIR__ . "/uploads/";
         if (!is_dir($target_dir)) { mkdir($target_dir, 0777, true); }
         $clean_name = preg_replace("/[^a-zA-Z0-9._-]/", "", basename($_FILES["file"]["name"]));
-        $target_file = $target_dir . $user_id . "_evidence_" . time() . "_" . $clean_name;
-        move_uploaded_file($_FILES["file"]["tmp_name"], $target_file);
+        $filename   = $user_id . "_evidence_" . time() . "_" . $clean_name;
+        $target_file = "uploads/" . $filename;
+        move_uploaded_file($_FILES["file"]["tmp_name"], __DIR__ . "/" . $target_file);
     }
 
     $stmt = $conn->prepare("UPDATE submissions SET title=?, description=?, file_path=?, status=? WHERE id=? AND user_id=?");
@@ -188,7 +249,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_portfolio']) && $
 }
 
 // -------------------------------------------------------------
-// 7. ACTION: Dedicated AI Copilot Evaluation & Chat
+// 8. ACTION: AI Copilot Evaluation & Chat (Reads File & Notes)
 // -------------------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portfolio_id > 0) {
     $user_msg     = trim($_POST['message'] ?? '');
@@ -210,11 +271,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             'time'    => date('h:i A')
         ];
 
+        // Extract text from attached artifact file (DOCX, XLSX, PDF, TXT)
         $file_context_str = "";
         if (!empty($portfolio['file_path'])) {
             $extractedText = extractFileTextContent($portfolio['file_path']);
             if (!empty($extractedText)) {
-                $file_context_str = "\n\n--- ATTACHED EVIDENCE / ARTIFACT CONTENT (" . basename($portfolio['file_path']) . ") ---\n" 
+                $file_context_str = "\n\n--- ATTACHED EVIDENCE / LESSON ARTIFACT (" . basename($portfolio['file_path']) . ") ---\n" 
                                   . $extractedText 
                                   . "\n--- END OF ATTACHMENT ---\n";
             }
@@ -228,12 +290,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                    . "4. Assessment (20 pts): Formative/summative tools aligned with objectives.\n"
                    . "5. Formatting & Mechanics (10 pts): Professional documentation.\n\n"
                    . "Portfolio Title: $current_ttl\n"
-                   . "Lesson Content / Procedures:\n$current_desc\n"
+                   . "Typed Lesson Plan / Procedures:\n" . ($current_desc ?: "(No typed text provided; evaluate the attached document below)") . "\n"
                    . $file_context_str . "\n"
                    . "User Inquiry: $user_msg\n\n"
-                   . "Provide structured, constructive feedback.";
+                   . "IMPORTANT: If an attached artifact is provided above, thoroughly read and evaluate its contents. Provide constructive feedback.";
 
-        $ai_reply = "Hello! I reviewed your submission and attached materials.";
+        $ai_reply = "Hello! I have reviewed your submission and attached materials.";
         if (function_exists('generateAIResponse')) {
             $ai_reply = generateAIResponse($ai_prompt, 'mentor');
         }
@@ -296,7 +358,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             min-height: 100vh;
         }
 
-        /* Sidebar Navigation */
+        /* Sidebar */
         .sidebar {
             width: 250px;
             height: 100vh;
@@ -349,7 +411,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             justify-content: center;
         }
 
-        /* Content Container */
+        /* Main Content */
         .main-content {
             margin-left: 250px;
             padding: 24px 30px;
@@ -358,7 +420,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             min-height: 100vh;
         }
 
-        /* Top Header */
+        /* Top Header Card */
         .top-header {
             display: flex;
             justify-content: space-between;
@@ -371,7 +433,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             margin-bottom: 20px;
         }
 
-        /* 3-Column Studio Layout */
+        /* 3-Column Studio Grid */
         .workspace-grid {
             display: grid;
             grid-template-columns: 270px 1fr 370px;
@@ -398,7 +460,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             overflow: hidden;
         }
 
-        /* Drawer (Left) */
         .drawer-header {
             padding: 14px 16px;
             border-bottom: 1px solid var(--border-color);
@@ -439,7 +500,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             border-left: 4px solid var(--primary-accent);
         }
 
-        /* Center Workspace */
         .workspace-body {
             padding: 24px;
             overflow-y: auto;
@@ -472,9 +532,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             font-family: inherit;
         }
 
-        /* ========================================================= */
-        /* STYLED CONTENT CONTAINER ("Add files or type in your files") */
-        /* ========================================================= */
+        /* Content Container with Background */
         .content-builder-container {
             background: linear-gradient(180deg, rgba(79, 70, 229, 0.02) 0%, rgba(0, 0, 0, 0.02) 100%);
             border: 1px solid var(--border-color);
@@ -510,10 +568,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             transition: all 0.2s ease;
         }
 
-        .tab-choice-btn:hover {
-            border-color: var(--primary-accent);
-        }
-
         .tab-choice-btn.active {
             border-color: var(--primary-accent);
             background: var(--primary-accent);
@@ -521,7 +575,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
         }
 
-        /* Lined Paper Textarea */
+        /* Aesthetic Lined Notebook Paper */
         .lined-paper-wrapper {
             background: #fdfbf7;
             border-radius: 10px;
@@ -545,7 +599,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             color: #1e293b;
             background-color: transparent;
-            /* Aesthetic Paper Margin and Horizontal Ruled Lines */
             background-image: 
                 linear-gradient(90deg, transparent 48px, #f87171 48px, #f87171 50px, transparent 50px),
                 repeating-linear-gradient(transparent, transparent 31px, #cbd5e1 31px, #cbd5e1 32px);
@@ -562,18 +615,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                 repeating-linear-gradient(transparent, transparent 31px, #334155 31px, #334155 32px);
         }
 
-        /* Upload & File Viewer */
         .dropzone-box {
             border: 2px dashed var(--border-color);
             background: var(--card-bg);
             border-radius: 10px;
             padding: 24px;
             text-align: center;
-            transition: border-color 0.2s ease;
-        }
-
-        .dropzone-box:hover {
-            border-color: var(--primary-accent);
         }
 
         .file-viewer-display {
@@ -637,7 +684,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             align-items: center;
         }
 
-        /* Status Badges */
         .card-status-badge {
             display: inline-flex;
             align-items: center;
@@ -653,7 +699,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         .badge-pending { background-color: #cce5ff; color: #004085; }
         .badge-graded { background-color: #d4edda; color: #155724; }
 
-        /* Fullscreen Copilot Loading Screen */
+        /* Fullscreen Copilot Loading Overlay */
         .copilot-loading-overlay {
             position: fixed;
             top: 0;
@@ -700,21 +746,19 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
 </head>
 <body>
 
-    <!-- Fullscreen Copilot Loading Screen -->
+    <!-- Loading Screen -->
     <div id="copilotLoadingOverlay" class="copilot-loading-overlay">
         <div class="loading-dialog">
             <div class="spinner-ring"></div>
             <i class="fas fa-robot" style="font-size: 32px; color: var(--primary-accent);"></i>
             <h3 style="margin: 0; font-size: 18px;">Copilot is Analyzing...</h3>
             <p style="margin: 0; font-size: 13px; opacity: 0.8; line-height: 1.5;">
-                Reviewing your lesson objectives and scanning submitted evidence files. Please wait.
+                Reading your lesson objectives, rubrics, and scanning submitted files. Please wait.
             </p>
         </div>
     </div>
 
-    <!-- ============================================== -->
-    <!-- MAIN NAVIGATION SIDEBAR                        -->
-    <!-- ============================================== -->
+    <!-- Main Navigation Sidebar -->
     <div class="sidebar">
         <h2><i class="fas fa-cube" style="color:var(--primary-accent);"></i> CORE Evaluation</h2>
         
@@ -730,7 +774,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             <i class="fas fa-folder"></i> My Portfolio
         </a>
 
-        <a href="user_profile.php">
+        <a href="profile.php">
             <i class="fas fa-user"></i> My Profile
         </a>
 
@@ -739,12 +783,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         </a>
     </div>
 
-    <!-- ============================================== -->
-    <!-- MAIN CONTENT AREA                              -->
-    <!-- ============================================== -->
+    <!-- Main Content Area -->
     <div class="main-content">
 
-        <!-- Top Header Card -->
+        <!-- Top Header Banner (Guaranteed to persist across deployments) -->
         <div class="top-header">
             <div style="display:flex; align-items:center; gap:14px;">
                 <div style="width:46px; height:46px; border-radius:50%; background:var(--primary-accent); color:white; display:flex; align-items:center; justify-content:center; font-size:18px;">
@@ -772,7 +814,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             </div>
         </div>
 
-        <!-- Navigation Bar: Back Button & Status Badge -->
+        <!-- Back Button & Status Bar -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;">
             <a href="student_portfolio.php" class="btn" style="background:#334155; color:white; padding:8px 16px; border-radius:6px; font-size:13px; font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
                 <i class="fas fa-arrow-left"></i> Back to All Portfolios
@@ -789,7 +831,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             </div>
         </div>
 
-        <!-- Alert Notification -->
         <?php if ($msg): ?>
             <div style="background:#d4edda; color:#155724; border:1px solid #c3e6cb; padding:12px 18px; border-radius:8px; margin-bottom:16px; font-weight:500;">
                 <i class="fas fa-check-circle"></i> <?= htmlspecialchars($msg) ?>
@@ -799,9 +840,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         <!-- 3-Column Studio Grid -->
         <div class="workspace-grid">
             
-            <!-- ============================================== -->
-            <!-- 1. LEFT PANE: Portfolio Submissions History    -->
-            <!-- ============================================== -->
+            <!-- LEFT COLUMN: Submissions History -->
             <div class="studio-card">
                 <div class="drawer-header">
                     <strong style="font-size:14px;"><i class="fas fa-folder-open"></i> My Portfolios</strong>
@@ -841,14 +880,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                 </div>
             </div>
 
-            <!-- ============================================== -->
-            <!-- 2. CENTER PANE: Workspace                      -->
-            <!-- ============================================== -->
+            <!-- CENTER COLUMN: Workspace -->
             <div class="studio-card">
                 <?php if ($portfolio): ?>
                     <div class="workspace-body">
 
-                        <!-- Graded Score Banner -->
                         <?php if ($is_graded): ?>
                             <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-left:5px solid #22c55e; padding:16px; border-radius:10px; margin-bottom:20px; color:#14532d;">
                                 <h3 style="margin:0 0 6px; font-size:17px; display:flex; align-items:center; gap:8px;">
@@ -866,7 +902,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                         <?php endif; ?>
 
                         <form method="POST" enctype="multipart/form-data" id="mainPortfolioForm">
-                            <!-- Portfolio Title -->
+                            <!-- Hidden Portfolio ID (Fixes Delete Draft) -->
+                            <input type="hidden" name="portfolio_id" value="<?= $portfolio['id'] ?>">
+
                             <div class="form-group">
                                 <label>Portfolio / Lesson Plan Title</label>
                                 <input type="text" name="title" class="form-control" 
@@ -875,7 +913,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                        <?= $is_graded ? 'readonly' : '' ?>>
                             </div>
 
-                            <!-- "Add files or type in your files" Container -->
                             <div class="form-group">
                                 <label style="display:flex; justify-content:space-between; align-items:center;">
                                     <span>Add files or type in your files</span>
@@ -883,7 +920,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                 </label>
 
                                 <div class="content-builder-container">
-                                    <!-- Option Selectors -->
                                     <div class="builder-tab-switch">
                                         <button type="button" class="tab-choice-btn active" id="btnModeUpload" onclick="setContextOption('upload')">
                                             <i class="fas fa-file-upload"></i> Add Files (Upload & Preview)
@@ -893,7 +929,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                         </button>
                                     </div>
 
-                                    <!-- Option 1: File Upload & In-Page Document Viewer -->
+                                    <!-- Option A: File Upload & Work Viewer -->
                                     <div id="sectionUploadOption" style="display:block;">
                                         <div class="dropzone-box">
                                             <i class="fas fa-cloud-upload-alt" style="font-size:36px; color:var(--primary-accent); margin-bottom:10px;"></i>
@@ -903,17 +939,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                             <?php if (!$is_graded): ?>
                                                 <input type="file" name="file" id="portfolioFileInput" onchange="handleFileSelected(this)" class="form-control" style="max-width:360px; margin:0 auto; padding:6px;">
                                             <?php endif; ?>
+                                            <div id="uploadStatusBadge" style="margin-top:10px; font-size:12px; font-weight:600;"></div>
                                         </div>
 
-                                        <!-- Live File Viewer Container -->
                                         <div id="workViewerContainer" class="file-viewer-display" style="<?= empty($portfolio['file_path']) ? 'display:none;' : '' ?>">
                                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                                                 <div style="font-weight:700; font-size:13.5px;"><i class="fas fa-eye"></i> Document Preview</div>
-                                                <?php if (!empty($portfolio['file_path'])): ?>
-                                                    <a href="<?= htmlspecialchars($portfolio['file_path']) ?>" target="_blank" style="color:var(--primary-accent); font-weight:600; font-size:12px;">
-                                                        <i class="fas fa-external-link-alt"></i> Open Full File
-                                                    </a>
-                                                <?php endif; ?>
+                                                <a id="fileOpenLink" href="<?= htmlspecialchars($portfolio['file_path'] ?? '#') ?>" target="_blank" style="color:var(--primary-accent); font-weight:600; font-size:12px; <?= empty($portfolio['file_path']) ? 'display:none;' : '' ?>">
+                                                    <i class="fas fa-external-link-alt"></i> Open Full File
+                                                </a>
                                             </div>
 
                                             <div id="filePreviewTarget">
@@ -937,7 +971,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                         </div>
                                     </div>
 
-                                    <!-- Option 2: Lined Notebook Paper Editor -->
+                                    <!-- Option B: Aesthetic Lined Notebook Paper Editor -->
                                     <div id="sectionTypeOption" style="display:none;">
                                         <div class="lined-paper-wrapper">
                                             <textarea name="description" id="editorContent" class="lined-paper-textarea" rows="14" 
@@ -948,7 +982,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                 </div>
                             </div>
 
-                            <!-- Submission Actions -->
                             <?php if (!$is_graded): ?>
                                 <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-top:24px;">
                                     <button type="submit" name="delete_draft" class="btn" style="background:#ef4444; color:white; border:none; padding:9px 16px; border-radius:6px; font-size:13px; cursor:pointer;" onclick="return confirm('Are you sure you want to delete this draft?');">
@@ -985,9 +1018,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                 <?php endif; ?>
             </div>
 
-            <!-- ============================================== -->
-            <!-- 3. RIGHT PANE: 100-Point AI Copilot Studio     -->
-            <!-- ============================================== -->
+            <!-- RIGHT COLUMN: 100-Point Copilot -->
             <div class="studio-card">
                 <div class="copilot-header">
                     <div style="display:flex; align-items:center; gap:8px;">
@@ -1007,7 +1038,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                     <?php endif; ?>
                 </div>
 
-                <!-- Chat Feed -->
                 <div class="copilot-chat-history" id="copilotChatBox">
                     <?php 
                     $chats = json_decode($portfolio['chat_transcript'] ?? '[]', true);
@@ -1026,12 +1056,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                     ?>
                         <div class="chat-bubble ai">
                             <div style="font-size:10px; opacity:0.75; margin-bottom:4px;">AI Copilot</div>
-                            <div>Hello! I am your portfolio mentor. I can read your attached documents (.docx, .xlsx, .pdf, images) and evaluate your lesson against the 100-point PPST rubric. Click <strong>"Evaluate 100-Pts"</strong> or ask any question!</div>
+                            <div>Hello! I can read your attached documents (.docx, .xlsx, .pdf, images) and evaluate your lesson against the 100-point PPST rubric. Click <strong>"Evaluate 100-Pts"</strong> or ask any question!</div>
                         </div>
                     <?php endif; ?>
                 </div>
 
-                <!-- Copilot Input Field -->
                 <?php if ($portfolio): ?>
                     <form method="POST" class="copilot-input-bar copilot-submit-trigger" id="copilotForm">
                         <input type="hidden" name="context_title" value="<?= htmlspecialchars($portfolio['title'] ?? '') ?>">
@@ -1048,9 +1077,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
 
     </div>
 
-    <!-- Interactive Scripts -->
+    <!-- Scripts -->
     <script>
-    // 1. Live Clock and Date
+    // Live Clock & Date
     function updateClock() {
         const now = new Date();
         const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
@@ -1064,7 +1093,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
     setInterval(updateClock, 1000);
     updateClock();
 
-    // 2. Dark Mode Toggle
+    // Dark Mode
     function toggleDarkMode() {
         document.body.classList.toggle('dark-mode');
         const isDark = document.body.classList.contains('dark-mode');
@@ -1074,7 +1103,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         document.body.classList.add('dark-mode');
     }
 
-    // 3. Option Toggle: Add Files vs Type in your files
+    // Toggle Tab: Add Files vs Type in your files
     function setContextOption(option) {
         const uploadSec = document.getElementById('sectionUploadOption');
         const typeSec   = document.getElementById('sectionTypeOption');
@@ -1092,28 +1121,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             btnType.classList.add('active');
             btnUpload.classList.remove('active');
             
-            // Focus into the lined paper
             const editor = document.getElementById('editorContent');
             if (editor) editor.focus();
         }
     }
 
-    // Auto-detect initial option tab
-    <?php if (!empty($portfolio['description']) && empty($portfolio['file_path'])): ?>
-        setContextOption('type');
-    <?php endif; ?>
-
-    // 4. Pre-submission Local File Viewer
+    // Instant File Selection & Background Upload (Ensures file is saved immediately)
     function handleFileSelected(input) {
         const file = input.files[0];
         if (!file) return;
 
         const viewerCard = document.getElementById('workViewerContainer');
         const previewTarget = document.getElementById('filePreviewTarget');
+        const statusBadge = document.getElementById('uploadStatusBadge');
         viewerCard.style.display = 'block';
 
         const ext = file.name.split('.').pop().toLowerCase();
         
+        // Show immediate local preview
         if (ext === 'pdf') {
             const blobURL = URL.createObjectURL(file);
             previewTarget.innerHTML = '<iframe src="' + blobURL + '" style="width:100%; height:380px; border:none; border-radius:6px;"></iframe>';
@@ -1127,17 +1152,48 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             previewTarget.innerHTML = '<div style="background:var(--card-bg); padding:16px; border-radius:6px; border:1px solid var(--border-color); font-size:13px;">'
                                     + '<i class="fas fa-file-alt" style="font-size:24px; color:var(--primary-accent); margin-right:8px;"></i>'
                                     + '<strong>Selected Document: ' + file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)</strong>'
-                                    + '<p style="margin:8px 0 0; opacity:0.75;">File loaded. It will be submitted and analyzed by the Copilot upon review.</p>'
+                                    + '<p style="margin:8px 0 0; opacity:0.75;">Document selected. Syncing with Copilot...</p>'
                                     + '</div>';
         }
+
+        // Background Upload so Copilot reads it immediately
+        if (statusBadge) {
+            statusBadge.innerHTML = '<span style="color:#d97706;"><i class="fas fa-spinner fa-spin"></i> Uploading file for Copilot analysis...</span>';
+        }
+
+        const formData = new FormData();
+        formData.append('ajax_file_upload', '1');
+        formData.append('file', file);
+
+        fetch('student_portfolio.php?id=<?= $portfolio_id ?>', {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                if (statusBadge) {
+                    statusBadge.innerHTML = '<span style="color:#16a34a;"><i class="fas fa-check-circle"></i> File uploaded & saved! Copilot can now evaluate it.</span>';
+                }
+                const openLink = document.getElementById('fileOpenLink');
+                if (openLink && data.file_path) {
+                    openLink.href = data.file_path;
+                    openLink.style.display = 'inline';
+                }
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            if (statusBadge) statusBadge.innerHTML = '';
+        });
     }
 
-    // 5. Submit Confirmation Dialog
+    // Submit Confirmation Dialog
     function confirmPortfolioSubmission() {
         return confirm("Are you sure you want to submit this portfolio for official review?\n\nOnce submitted, your lesson plan and attached files will be queued for evaluator/supervisor scoring.");
     }
 
-    // 6. Copilot Loading Screen Trigger
+    // Copilot Loading Screen Trigger
     (function () {
         const chatBox = document.getElementById('copilotChatBox');
         if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
