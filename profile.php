@@ -14,7 +14,8 @@ $error   = "";
 
 // 1. Fetch user data with Supervisor Join
 $sql_user = "SELECT u.*, s.fullname as supervisor_name FROM users u LEFT JOIN users s ON u.assigned_supervisor_id = s.id WHERE u.id = $user_id";
-$user = $conn->query($sql_user)->fetch_assoc();
+$user_res = $conn->query($sql_user);
+$user = $user_res ? $user_res->fetch_assoc() : [];
 $initials = strtoupper(substr($user['fullname'] ?? 'U', 0, 1));
 
 // 2. Handle Profile Updates
@@ -40,7 +41,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     
     // Handle Photo Removal
     if (isset($_POST['remove_photo']) && $_POST['remove_photo'] == '1') {
-        if (!empty($user['profile_pic']) && file_exists($user['profile_pic'])) {
+        if (!empty($user['profile_pic']) && file_exists($user['profile_pic'])) { 
             unlink($user['profile_pic']); 
         }
         $profile_pic_path = NULL; 
@@ -93,7 +94,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if ($stmt->execute()) {
         $msg = "Profile updated successfully!";
         $_SESSION['fullname'] = $fullname;
-        $user = $conn->query($sql_user)->fetch_assoc();
+        $user_res = $conn->query($sql_user);
+        $user = $user_res ? $user_res->fetch_assoc() : [];
         $initials = strtoupper(substr($user['fullname'] ?? 'U', 0, 1));
     } else {
         $error = "Error updating profile: " . $conn->error;
@@ -110,7 +112,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
-        /* Top Profile Summary Header (Workday Employee Banner) */
+        /* Top Profile Summary Header */
         .profile-banner-card {
             background: var(--card-bg);
             border-radius: 16px;
@@ -179,6 +181,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         body.dark-mode .badge-role {
             background-color: rgba(52, 152, 219, 0.2);
             color: #a8c7fa;
+        }
+
+        .supervisor-chip {
+            background-color: rgba(46, 204, 113, 0.12);
+            color: #27ae60;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        body.dark-mode .supervisor-chip {
+            background-color: rgba(46, 204, 113, 0.2);
+            color: #2ecc71;
         }
 
         /* Workday Container Layout */
@@ -493,6 +512,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <span class="badge-role"><?= htmlspecialchars(str_replace('_', ' ', $role)) ?></span>
                         <span><i class="fas fa-id-badge"></i> <?= htmlspecialchars($user['username'] ?? '') ?></span>
                         <span><i class="fas fa-envelope"></i> <?= htmlspecialchars($user['email'] ?? '') ?></span>
+                        
+                        <!-- Prominent Supervisor Chip for Student Teachers -->
+                        <?php if ($role === 'student_teacher'): ?>
+                            <span class="supervisor-chip">
+                                <i class="fas fa-user-tie"></i> Supervisor: <strong><?= htmlspecialchars(!empty($user['supervisor_name']) ? $user['supervisor_name'] : 'Not Assigned Yet') ?></strong>
+                            </span>
+                        <?php endif; ?>
                     </div>
                 </div>
             </div>
@@ -677,16 +703,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                                 <input type="email" class="form-control" value="<?= htmlspecialchars($user['email'] ?? '') ?>" disabled>
                             </div>
                             
-                        <?php if ($role === 'student_teacher'): ?>
+                            <?php if ($role === 'student_teacher'): ?>
                             <div class="form-group full-width" style="background: rgba(52, 152, 219, 0.08); padding: 15px 20px; border-radius: 10px; border-left: 4px solid var(--btn-primary); margin-top: 15px;">
                                 <label style="color: var(--btn-primary); font-weight: 700; margin-bottom: 4px;">
                                     <i class="fas fa-user-tie"></i> Assigned Supervising Teacher (Cooperating Teacher)
-                                 </label>
+                                </label>
                                 <div style="font-size: 15px; font-weight: 600; color: var(--text-color);">
-                                 <?= htmlspecialchars($user['supervisor_name'] ?? 'Not Assigned Yet') ?>
+                                    <?= htmlspecialchars(!empty($user['supervisor_name']) ? $user['supervisor_name'] : 'Not Assigned Yet') ?>
                                 </div>
                             </div>
-                        <?php endif; ?>
 
                             <div class="form-group full-width">
                                 <label>Practice Teaching Partner School</label>
@@ -808,7 +833,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         const dataUrl = canvas.toDataURL('image/png');
         document.getElementById('capturedImageData').value = dataUrl;
         
-        // Update both the large studio preview and top banner avatar
         document.getElementById('avatarPreview').style.backgroundImage = `url(${dataUrl})`;
         document.getElementById('avatarPreview').innerHTML = '';
         document.getElementById('bannerAvatar').style.backgroundImage = `url(${dataUrl})`;
