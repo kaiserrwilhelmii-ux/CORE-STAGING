@@ -9,19 +9,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student_teacher') {
 }
 
 $user_id = intval($_SESSION['user_id']);
-
-// -------------------------------------------------------------
-// 0. FETCH USER DETAILS FROM DATABASE (Persists across redeploys)
-// -------------------------------------------------------------
-$user_stmt = $conn->prepare("SELECT fullname, username, email FROM users WHERE id = ?");
-$user_stmt->bind_param("i", $user_id);
-$user_stmt->execute();
-$user_row = $user_stmt->get_result()->fetch_assoc();
-
-$fullname = !empty($user_row['fullname']) ? $user_row['fullname'] : ($_SESSION['fullname'] ?? 'Student Teacher');
-$username = !empty($user_row['username']) ? $user_row['username'] : ($_SESSION['username'] ?? 'student');
-$email    = !empty($user_row['email']) ? $user_row['email'] : ($_SESSION['email'] ?? '');
-$msg      = isset($_GET['msg']) ? trim($_GET['msg']) : "";
+$msg     = isset($_GET['msg']) ? trim($_GET['msg']) : "";
 
 // -------------------------------------------------------------
 // HELPER: Extract text content from submitted files (DOCX, XLSX, PDF, TXT)
@@ -36,12 +24,10 @@ function extractFileTextContent($filePath) {
 
     $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
     
-    // Plain Text, Markdown, CSV, HTML
     if (in_array($ext, ['txt', 'md', 'csv', 'html', 'json'])) {
         return substr(file_get_contents($fullPath), 0, 7000);
     }
     
-    // Microsoft Word (.docx)
     if ($ext === 'docx') {
         if (class_exists('ZipArchive')) {
             $zip = new ZipArchive();
@@ -56,7 +42,6 @@ function extractFileTextContent($filePath) {
                 $zip->close();
             }
         }
-        // Fallback using unzip command if available
         if (function_exists('shell_exec')) {
             $out = @shell_exec("unzip -p " . escapeshellarg($fullPath) . " word/document.xml 2>/dev/null");
             if (!empty($out)) {
@@ -66,7 +51,6 @@ function extractFileTextContent($filePath) {
         }
     }
     
-    // Microsoft Excel (.xlsx / .xlxx)
     if (in_array($ext, ['xlsx', 'xlxx']) && class_exists('ZipArchive')) {
         $zip = new ZipArchive();
         if ($zip->open($fullPath) === TRUE) {
@@ -81,7 +65,6 @@ function extractFileTextContent($filePath) {
         }
     }
     
-    // Adobe PDF (.pdf)
     if ($ext === 'pdf') {
         if (function_exists('shell_exec')) {
             $out = @shell_exec("pdftotext " . escapeshellarg($fullPath) . " - 2>/dev/null");
@@ -120,7 +103,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'new') {
 }
 
 // -------------------------------------------------------------
-// 2. ACTION: Delete Draft Portfolio (FIXED: Handles both POST and GET IDs)
+// 2. ACTION: Delete Draft Portfolio
 // -------------------------------------------------------------
 if (isset($_POST['delete_draft'])) {
     $del_id = intval($_POST['portfolio_id'] ?? ($_GET['id'] ?? 0));
@@ -129,7 +112,7 @@ if (isset($_POST['delete_draft'])) {
         $stmt->bind_param("ii", $del_id, $user_id);
         $stmt->execute();
     }
-    header("Location: student_portfolio.php?msg=" . urlencode("Draft portfolio deleted successfully."));
+    header("Location: student_portfolio.php?msg=" . urlencode("Draft portfolio deleted."));
     exit();
 }
 
@@ -197,7 +180,7 @@ if ($portfolio_id > 0) {
 }
 
 // -------------------------------------------------------------
-// 6. INSTANT ASYNC FILE UPLOADER (Auto-syncs file so Copilot can read it immediately)
+// 6. INSTANT ASYNC FILE UPLOAD (Syncs file for Copilot without page reload)
 // -------------------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['ajax_file_upload']) && $portfolio_id > 0) {
     header('Content-Type: application/json');
@@ -249,7 +232,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_portfolio']) && $
 }
 
 // -------------------------------------------------------------
-// 8. ACTION: AI Copilot Evaluation & Chat (Reads File & Notes)
+// 8. ACTION: AI Copilot Evaluation & Chat
 // -------------------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portfolio_id > 0) {
     $user_msg     = trim($_POST['message'] ?? '');
@@ -271,7 +254,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             'time'    => date('h:i A')
         ];
 
-        // Extract text from attached artifact file (DOCX, XLSX, PDF, TXT)
         $file_context_str = "";
         if (!empty($portfolio['file_path'])) {
             $extractedText = extractFileTextContent($portfolio['file_path']);
@@ -293,9 +275,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                    . "Typed Lesson Plan / Procedures:\n" . ($current_desc ?: "(No typed text provided; evaluate the attached document below)") . "\n"
                    . $file_context_str . "\n"
                    . "User Inquiry: $user_msg\n\n"
-                   . "IMPORTANT: If an attached artifact is provided above, thoroughly read and evaluate its contents. Provide constructive feedback.";
+                   . "IMPORTANT: If an attached artifact is provided above, thoroughly read and evaluate its contents.";
 
-        $ai_reply = "Hello! I have reviewed your submission and attached materials.";
+        $ai_reply = "Hello! I reviewed your submission and attached materials.";
         if (function_exists('generateAIResponse')) {
             $ai_reply = generateAIResponse($ai_prompt, 'mentor');
         }
@@ -358,79 +340,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             min-height: 100vh;
         }
 
-        /* Sidebar */
-        .sidebar {
-            width: 250px;
-            height: 100vh;
-            background: linear-gradient(180deg, #2c3e50 0%, #1a252f 100%);
-            color: #ecf0f1;
-            position: fixed;
-            top: 0;
-            left: 0;
-            padding: 20px;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            z-index: 1000;
-            box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-        }
-
-        .sidebar h2 {
-            font-size: 18px;
-            color: #fff;
-            margin: 0 0 25px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .sidebar a {
-            padding: 12px 16px;
-            color: #cbd5e1;
-            text-decoration: none;
-            border-radius: 8px;
-            margin-bottom: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            transition: all 0.2s ease;
-        }
-
-        .sidebar a:hover, .sidebar a.active {
-            background-color: var(--primary-accent);
-            color: #ffffff;
-            transform: translateX(4px);
-        }
-
-        .logout-btn {
-            margin-top: auto;
-            background-color: #dc2626 !important;
-            color: white !important;
-            justify-content: center;
-        }
-
-        /* Main Content */
+        /* Content Area */
         .main-content {
             margin-left: 250px;
             padding: 24px 30px;
             width: calc(100% - 250px);
             box-sizing: border-box;
             min-height: 100vh;
-        }
-
-        /* Top Header Card */
-        .top-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--card-bg);
-            padding: 18px 24px;
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            margin-bottom: 20px;
         }
 
         /* 3-Column Studio Grid */
@@ -758,61 +674,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         </div>
     </div>
 
-    <!-- Main Navigation Sidebar -->
-    <div class="sidebar">
-        <h2><i class="fas fa-cube" style="color:var(--primary-accent);"></i> CORE Evaluation</h2>
-        
-        <a href="dashboard.php">
-            <i class="fas fa-chart-line"></i> Dashboard
-        </a>
-        
-        <a href="user_evaluation.php">
-            <i class="fas fa-clipboard-check"></i> My Evaluations
-        </a>
+    <!-- 1. Unified Sidebar Component -->
+    <?php include __DIR__ . '/sidebar.php'; ?>
 
-        <a href="student_portfolio.php" class="active">
-            <i class="fas fa-folder"></i> My Portfolio
-        </a>
-
-        <a href="profile.php">
-            <i class="fas fa-user"></i> My Profile
-        </a>
-
-        <a href="logout.php" class="logout-btn">
-            <i class="fas fa-sign-out-alt"></i> Logout
-        </a>
-    </div>
-
-    <!-- Main Content Area -->
+    <!-- 2. Main Content Area -->
     <div class="main-content">
 
-        <!-- Top Header Banner (Guaranteed to persist across deployments) -->
-        <div class="top-header">
-            <div style="display:flex; align-items:center; gap:14px;">
-                <div style="width:46px; height:46px; border-radius:50%; background:var(--primary-accent); color:white; display:flex; align-items:center; justify-content:center; font-size:18px;">
-                    <i class="fas fa-user"></i>
-                </div>
-                <div>
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <h3 style="margin:0; font-size:17px;"><?= htmlspecialchars($fullname) ?></h3>
-                        <span style="background:#e0f2fe; color:#0369a1; font-size:10px; font-weight:700; padding:2px 8px; border-radius:12px; text-transform:uppercase;">Student Teacher</span>
-                    </div>
-                    <div style="font-size:12px; opacity:0.7; margin-top:3px;">
-                        <i class="fas fa-id-badge"></i> <?= htmlspecialchars($username) ?> &bull; <?= htmlspecialchars($email) ?>
-                    </div>
-                </div>
-            </div>
-
-            <div style="display:flex; align-items:center; gap:16px;">
-                <div style="text-align:right;">
-                    <div id="liveClock" style="font-weight:700; font-size:14px;"><i class="far fa-clock"></i> --:--:--</div>
-                    <div id="liveDate" style="font-size:12px; opacity:0.7;">Loading date...</div>
-                </div>
-                <button id="themeToggle" class="theme-toggle" onclick="toggleDarkMode()" style="background:transparent; border:1px solid var(--border-color); color:var(--text-color); padding:8px 14px; border-radius:20px; font-weight:600; cursor:pointer;">
-                    <i class="fas fa-moon"></i> Dark Mode
-                </button>
-            </div>
-        </div>
+        <!-- 3. Unified Top Header Component -->
+        <?php include __DIR__ . '/header.php'; ?>
 
         <!-- Back Button & Status Bar -->
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; flex-wrap:wrap; gap:10px;">
@@ -902,7 +771,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                         <?php endif; ?>
 
                         <form method="POST" enctype="multipart/form-data" id="mainPortfolioForm">
-                            <!-- Hidden Portfolio ID (Fixes Delete Draft) -->
                             <input type="hidden" name="portfolio_id" value="<?= $portfolio['id'] ?>">
 
                             <div class="form-group">
@@ -1079,31 +947,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
 
     <!-- Scripts -->
     <script>
-    // Live Clock & Date
-    function updateClock() {
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
-        const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-        
-        const clockEl = document.getElementById('liveClock');
-        const dateEl = document.getElementById('liveDate');
-        if (clockEl) clockEl.innerHTML = '<i class="far fa-clock"></i> ' + timeStr;
-        if (dateEl) dateEl.innerText = dateStr;
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    // Dark Mode
-    function toggleDarkMode() {
-        document.body.classList.toggle('dark-mode');
-        const isDark = document.body.classList.contains('dark-mode');
-        localStorage.setItem('core_dark_mode', isDark ? '1' : '0');
-    }
-    if (localStorage.getItem('core_dark_mode') === '1') {
-        document.body.classList.add('dark-mode');
-    }
-
-    // Toggle Tab: Add Files vs Type in your files
     function setContextOption(option) {
         const uploadSec = document.getElementById('sectionUploadOption');
         const typeSec   = document.getElementById('sectionTypeOption');
@@ -1126,7 +969,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         }
     }
 
-    // Instant File Selection & Background Upload (Ensures file is saved immediately)
     function handleFileSelected(input) {
         const file = input.files[0];
         if (!file) return;
@@ -1138,7 +980,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
 
         const ext = file.name.split('.').pop().toLowerCase();
         
-        // Show immediate local preview
         if (ext === 'pdf') {
             const blobURL = URL.createObjectURL(file);
             previewTarget.innerHTML = '<iframe src="' + blobURL + '" style="width:100%; height:380px; border:none; border-radius:6px;"></iframe>';
@@ -1156,7 +997,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                     + '</div>';
         }
 
-        // Background Upload so Copilot reads it immediately
         if (statusBadge) {
             statusBadge.innerHTML = '<span style="color:#d97706;"><i class="fas fa-spinner fa-spin"></i> Uploading file for Copilot analysis...</span>';
         }
@@ -1188,12 +1028,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         });
     }
 
-    // Submit Confirmation Dialog
     function confirmPortfolioSubmission() {
         return confirm("Are you sure you want to submit this portfolio for official review?\n\nOnce submitted, your lesson plan and attached files will be queued for evaluator/supervisor scoring.");
     }
 
-    // Copilot Loading Screen Trigger
     (function () {
         const chatBox = document.getElementById('copilotChatBox');
         if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
