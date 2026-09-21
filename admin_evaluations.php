@@ -35,8 +35,6 @@ $student_id = isset($_GET['student_id']) ? intval($_GET['student_id']) : 0;
     <?php include 'sidebar.php'; ?>
     <div class="main-content">
         <?php if ($student_id == 0): ?>
-        <?php include 'header.php'; ?>
-
             
             <div class="card">
                 <h3>Select a Student to view their Scorecard</h3>
