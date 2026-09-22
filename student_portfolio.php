@@ -180,7 +180,7 @@ if ($portfolio_id > 0) {
 }
 
 // -------------------------------------------------------------
-// 6. INSTANT ASYNC FILE UPLOAD (Background Sync for Copilot)
+// 6. INSTANT ASYNC FILE UPLOAD (AJAX - Background Sync)
 // -------------------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['ajax_file_upload']) && $portfolio_id > 0) {
     header('Content-Type: application/json');
@@ -205,7 +205,103 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['ajax_file_upload']) &&
 }
 
 // -------------------------------------------------------------
-// 7. ACTION: Save Draft or Submit Portfolio
+// 7. COPILOT ASYNC CHAT & EVALUATION (AJAX - Zero Page Reload)
+// -------------------------------------------------------------
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['ajax_chat']) && $portfolio_id > 0) {
+    header('Content-Type: application/json');
+    $user_msg     = trim($_POST['message'] ?? '');
+    $auto_eval    = isset($_POST['run_eval']) && $_POST['run_eval'] == '1';
+    $current_desc = trim($_POST['context_description'] ?? ($portfolio['description'] ?? ''));
+    $current_ttl  = trim($_POST['context_title'] ?? ($portfolio['title'] ?? ''));
+
+    if ($auto_eval) {
+        $user_msg = "Please evaluate this portfolio submission against the 100-Point PPST Rubric. Evaluate Objectives (20), Content (20), Methodology (30), Assessment (20), and Mechanics (10). Provide an estimated score out of 100 with clear marks [GREAT: 90-100], [GOOD: 75-89], or [NEEDS REVISION: <75].";
+    }
+
+    if (empty($user_msg)) {
+        echo json_encode(['success' => false, 'error' => 'Message is empty']);
+        exit();
+    }
+
+    $chats = json_decode($portfolio['chat_transcript'] ?? '[]', true);
+    if (!is_array($chats)) { $chats = []; }
+
+    $user_time = date('h:i A');
+    $chats[] = [
+        'sender'  => 'user',
+        'message' => $user_msg,
+        'time'    => $user_time
+    ];
+
+    // Read attached file text if present
+    $file_context_str = "";
+    if (!empty($portfolio['file_path'])) {
+        $extractedText = extractFileTextContent($portfolio['file_path']);
+        if (!empty($extractedText)) {
+            $file_context_str = "\n\n--- ATTACHED EVIDENCE / LESSON ARTIFACT (" . basename($portfolio['file_path']) . ") ---\n" 
+                              . $extractedText 
+                              . "\n--- END OF ATTACHMENT ---\n";
+        }
+    }
+
+    if ($auto_eval) {
+        $ai_prompt = "You are an expert Academic Evaluator for pre-service teachers.\n"
+                   . "Task: Evaluate this lesson plan/portfolio submission against the 100-Point PPST Rubric:\n"
+                   . "1. Objectives (20 pts): Specific, Measurable, HOTS-aligned (Bloom's Taxonomy).\n"
+                   . "2. Content (20 pts): Accurate subject matter aligned with curriculum.\n"
+                   . "3. Methodology (30 pts): Active student-centered pedagogy and instructional flow.\n"
+                   . "4. Assessment (20 pts): Formative/summative tools aligned with objectives.\n"
+                   . "5. Formatting & Mechanics (10 pts): Professional documentation.\n\n"
+                   . "Portfolio Title: $current_ttl\n"
+                   . "Lesson Content / Procedures:\n" . ($current_desc ?: "(No text entered in editor)") . "\n"
+                   . $file_context_str . "\n\n"
+                   . "Provide an estimated score out of 100, classify as [GREAT: 90-100], [GOOD: 75-89], or [NEEDS REVISION: <75], and provide actionable advice.";
+    } else {
+        $ai_prompt = "You are a supportive, knowledgeable Academic Copilot and Teacher Education Mentor for Pre-Service Teachers.\n"
+                   . "The student is asking you a question. You are fully capable of answering ANY question outside of just grading, including:\n"
+                   . "- General teaching methods, lesson planning ideas, learning objectives (Bloom's Taxonomy), pedagogical approaches.\n"
+                   . "- Explaining concepts in education, subject matter explanations, classroom management, or assessment design.\n"
+                   . "- Answering general questions, brainstorming, or having friendly professional conversation.\n\n"
+                   . "Workspace Context (Reference only if relevant):\n"
+                   . "- Portfolio Title: " . ($current_ttl ?: "Untitled") . "\n"
+                   . "- Lesson Content: " . ($current_desc ?: "None typed yet") . "\n"
+                   . ($file_context_str ? "- Attached File:\n" . $file_context_str . "\n" : "") . "\n"
+                   . "Student's Message: \"$user_msg\"\n\n"
+                   . "RULES:\n"
+                   . "1. Answer the student's question directly, clearly, and supportively.\n"
+                   . "2. Do NOT demand a lesson plan or refuse to answer if no files are uploaded. Answer their question naturally!\n"
+                   . "3. Keep your tone encouraging and professional.";
+    }
+
+    $ai_reply = "Hello! How can I assist you with your teaching practice today?";
+    if (function_exists('generateAIResponse')) {
+        $ai_reply = generateAIResponse($ai_prompt, 'mentor');
+    }
+
+    $ai_time = date('h:i A');
+    $chats[] = [
+        'sender'  => 'ai',
+        'message' => $ai_reply,
+        'time'    => $ai_time
+    ];
+
+    $updated_json = json_encode($chats);
+    $stmt = $conn->prepare("UPDATE submissions SET chat_transcript=? WHERE id=? AND user_id=?");
+    $stmt->bind_param("sii", $updated_json, $portfolio_id, $user_id);
+    $stmt->execute();
+
+    echo json_encode([
+        'success'   => true,
+        'user_msg'  => $user_msg,
+        'user_time' => $user_time,
+        'ai_reply'  => $ai_reply,
+        'ai_time'   => $ai_time
+    ]);
+    exit();
+}
+
+// -------------------------------------------------------------
+// 8. ACTION: Save Draft or Submit Portfolio (Main Form)
 // -------------------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_portfolio']) && $portfolio_id > 0 && !$is_graded) {
     $title_val  = trim($_POST['title'] ?? 'Untitled Portfolio');
@@ -227,93 +323,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['save_portfolio']) && $
     if ($stmt->execute()) {
         $notif = ($new_status === 'pending') ? "Portfolio submitted for official review!" : "Draft saved successfully!";
         header("Location: student_portfolio.php?id=" . $portfolio_id . "&msg=" . urlencode($notif));
-        exit();
-    }
-}
-
-// -------------------------------------------------------------
-// 8. ACTION: AI Copilot (General Mentor Chat + 100-Point Rubric)
-// -------------------------------------------------------------
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portfolio_id > 0) {
-    $user_msg     = trim($_POST['message'] ?? '');
-    $auto_eval    = isset($_POST['run_eval']) && $_POST['run_eval'] == '1';
-    $current_desc = trim($_POST['context_description'] ?? ($portfolio['description'] ?? ''));
-    $current_ttl  = trim($_POST['context_title'] ?? ($portfolio['title'] ?? ''));
-
-    if ($auto_eval) {
-        $user_msg = "Please evaluate this portfolio submission against the 100-Point PPST Rubric. Evaluate Objectives (20), Content (20), Methodology (30), Assessment (20), and Mechanics (10). Provide an estimated score out of 100 with clear marks [GREAT: 90-100], [GOOD: 75-89], or [NEEDS REVISION: <75].";
-    }
-
-    if (!empty($user_msg)) {
-        $chats = json_decode($portfolio['chat_transcript'] ?? '[]', true);
-        if (!is_array($chats)) { $chats = []; }
-
-        $chats[] = [
-            'sender'  => 'user',
-            'message' => $user_msg,
-            'time'    => date('h:i A')
-        ];
-
-        // Extract text from attached artifact file (if any)
-        $file_context_str = "";
-        if (!empty($portfolio['file_path'])) {
-            $extractedText = extractFileTextContent($portfolio['file_path']);
-            if (!empty($extractedText)) {
-                $file_context_str = "\n\n--- ATTACHED EVIDENCE / LESSON ARTIFACT (" . basename($portfolio['file_path']) . ") ---\n" 
-                                  . $extractedText 
-                                  . "\n--- END OF ATTACHMENT ---\n";
-            }
-        }
-
-        // Distinct Prompts: Official Rubric vs General Academic Chat
-        if ($auto_eval) {
-            // Mode 1: 100-Point Rubric Scoring
-            $ai_prompt = "You are an expert Academic Evaluator for pre-service teachers.\n"
-                       . "Task: Evaluate this lesson plan/portfolio submission against the 100-Point PPST Rubric:\n"
-                       . "1. Objectives (20 pts): Specific, Measurable, HOTS-aligned (Bloom's Taxonomy).\n"
-                       . "2. Content (20 pts): Accurate subject matter aligned with curriculum.\n"
-                       . "3. Methodology (30 pts): Active student-centered pedagogy and instructional flow.\n"
-                       . "4. Assessment (20 pts): Formative/summative tools aligned with objectives.\n"
-                       . "5. Formatting & Mechanics (10 pts): Professional documentation.\n\n"
-                       . "Portfolio Title: $current_ttl\n"
-                       . "Lesson Content / Procedures:\n" . ($current_desc ?: "(No text entered in editor)") . "\n"
-                       . $file_context_str . "\n\n"
-                       . "Provide an estimated score out of 100, classify as [GREAT: 90-100], [GOOD: 75-89], or [NEEDS REVISION: <75], and provide actionable advice. If no content is attached at all, invite the student to add their materials.";
-        } else {
-            // Mode 2: General Mentor / Questions Outside of Grading
-            $ai_prompt = "You are a supportive, knowledgeable Academic Copilot and Teacher Education Mentor for Pre-Service Teachers.\n"
-                       . "The student is asking you a question. You are fully capable of answering ANY question outside of just grading, including:\n"
-                       . "- General teaching methods, lesson planning ideas, learning objectives (Bloom's Taxonomy), pedagogical approaches.\n"
-                       . "- Explaining concepts in education, subject matter explanations, classroom management, or assessment design.\n"
-                       . "- Answering general questions, brainstorming, or having friendly professional conversation.\n\n"
-                       . "Workspace Context (Reference only if relevant):\n"
-                       . "- Portfolio Title: " . ($current_ttl ?: "Untitled") . "\n"
-                       . "- Lesson Content: " . ($current_desc ?: "None typed yet") . "\n"
-                       . ($file_context_str ? "- Attached File:\n" . $file_context_str . "\n" : "") . "\n"
-                       . "Student's Message: \"$user_msg\"\n\n"
-                       . "RULES:\n"
-                       . "1. Answer the student's question directly, clearly, and supportively.\n"
-                       . "2. Do NOT demand a lesson plan or refuse to answer if no files are uploaded. Answer their question naturally!\n"
-                       . "3. Keep your tone encouraging and professional.";
-        }
-
-        $ai_reply = "Hello! How can I assist you with your teaching practice today?";
-        if (function_exists('generateAIResponse')) {
-            $ai_reply = generateAIResponse($ai_prompt, 'mentor');
-        }
-
-        $chats[] = [
-            'sender'  => 'ai',
-            'message' => $ai_reply,
-            'time'    => date('h:i A')
-        ];
-
-        $updated_json = json_encode($chats);
-        $stmt = $conn->prepare("UPDATE submissions SET chat_transcript=? WHERE id=? AND user_id=?");
-        $stmt->bind_param("sii", $updated_json, $portfolio_id, $user_id);
-        $stmt->execute();
-
-        header("Location: student_portfolio.php?id=" . $portfolio_id);
         exit();
     }
 }
@@ -557,6 +566,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             padding: 16px;
         }
 
+        /* Copilot Panel */
         .copilot-header {
             background: linear-gradient(135deg, #4f46e5, #7c3aed);
             color: #ffffff;
@@ -601,6 +611,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
             border-bottom-left-radius: 2px;
         }
 
+        .chat-bubble.typing {
+            font-style: italic;
+            opacity: 0.8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
         .copilot-input-bar {
             padding: 12px;
             border-top: 1px solid var(--border-color);
@@ -623,64 +641,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         .badge-draft { background-color: #fff3cd; color: #856404; }
         .badge-pending { background-color: #cce5ff; color: #004085; }
         .badge-graded { background-color: #d4edda; color: #155724; }
-
-        .copilot-loading-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            background: rgba(15, 23, 42, 0.75);
-            backdrop-filter: blur(5px);
-            z-index: 999999;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            color: #ffffff;
-        }
-
-        .loading-dialog {
-            background: var(--card-bg);
-            color: var(--text-color);
-            padding: 32px 40px;
-            border-radius: 16px;
-            text-align: center;
-            max-width: 400px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 14px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.3);
-        }
-
-        .spinner-ring {
-            width: 48px;
-            height: 48px;
-            border: 4px solid rgba(79, 70, 229, 0.15);
-            border-top: 4px solid var(--primary-accent);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
     </style>
 </head>
 <body>
-
-    <!-- Fullscreen Copilot Loading Overlay -->
-    <div id="copilotLoadingOverlay" class="copilot-loading-overlay">
-        <div class="loading-dialog">
-            <div class="spinner-ring"></div>
-            <i class="fas fa-robot" style="font-size: 32px; color: var(--primary-accent);"></i>
-            <h3 style="margin: 0; font-size: 18px;">Copilot is Thinking...</h3>
-            <p style="margin: 0; font-size: 13px; opacity: 0.8; line-height: 1.5;">
-                Analyzing your question and reviewing lesson materials. Please wait.
-            </p>
-        </div>
-    </div>
 
     <!-- 1. Unified Sidebar Component -->
     <?php include __DIR__ . '/sidebar.php'; ?>
@@ -688,7 +651,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
     <!-- 2. Main Content Area -->
     <div class="main-content">
 
-        <!-- 3. Unified Top Header Component (Correctly placed above the grid) -->
+        <!-- 3. Unified Top Header Component -->
         <?php include __DIR__ . '/header.php'; ?>
 
         <!-- Action Bar: Back Button & Mode Status -->
@@ -838,7 +801,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                                                         echo '<div style="background:var(--card-bg); padding:16px; border-radius:6px; border:1px solid var(--border-color); font-size:13px;">'
                                                            . '<i class="fas fa-file-alt" style="font-size:24px; color:var(--primary-accent); margin-right:8px;"></i>'
                                                            . '<strong>' . htmlspecialchars(basename($portfolio['file_path'])) . '</strong>'
-                                                           . '<p style="margin:8px 0 0; opacity:0.75;">Attached file ready for review. Copilot extracts and analyzes this file during scoring.</p>'
+                                                           . '<p style="margin:8px 0 0; opacity:0.75;">Attached file ready for review. Copilot can analyze this file in real-time.</p>'
                                                            . '</div>';
                                                     }
                                                 }
@@ -894,7 +857,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                 <?php endif; ?>
             </div>
 
-            <!-- COLUMN 3: 100-Point Copilot -->
+            <!-- COLUMN 3: Dedicated AJAX Copilot (Zero Page Reload) -->
             <div class="studio-card">
                 <div class="copilot-header">
                     <div style="display:flex; align-items:center; gap:8px;">
@@ -903,14 +866,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                     </div>
 
                     <?php if ($portfolio): ?>
-                        <form method="POST" class="copilot-submit-trigger" style="margin:0;">
-                            <input type="hidden" name="run_eval" value="1">
-                            <input type="hidden" name="context_title" value="<?= htmlspecialchars($portfolio['title'] ?? '') ?>">
-                            <input type="hidden" name="context_description" value="<?= htmlspecialchars($portfolio['description'] ?? '') ?>">
-                            <button type="submit" name="send_chat" style="background:#ffffff; color:#4f46e5; border:none; padding:4px 10px; font-size:11px; border-radius:20px; font-weight:700; cursor:pointer;" title="Run full 100-point rubric evaluation">
-                                <i class="fas fa-chart-bar"></i> Evaluate 100-Pts
-                            </button>
-                        </form>
+                        <button type="button" onclick="triggerCopilotEval()" style="background:#ffffff; color:#4f46e5; border:none; padding:4px 10px; font-size:11px; border-radius:20px; font-weight:700; cursor:pointer;" title="Run full 100-point rubric evaluation">
+                            <i class="fas fa-chart-bar"></i> Evaluate 100-Pts
+                        </button>
                     <?php endif; ?>
                 </div>
 
@@ -938,11 +896,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
                 </div>
 
                 <?php if ($portfolio): ?>
-                    <form method="POST" class="copilot-input-bar copilot-submit-trigger" id="copilotForm">
-                        <input type="hidden" name="context_title" value="<?= htmlspecialchars($portfolio['title'] ?? '') ?>">
-                        <input type="hidden" name="context_description" id="hiddenContextDescription" value="<?= htmlspecialchars($portfolio['description'] ?? '') ?>">
-                        <input type="text" name="message" class="form-control" placeholder="Ask Copilot anything..." required style="border-radius:20px; padding:10px 14px; font-size:13px;">
-                        <button type="submit" name="send_chat" style="background:var(--primary-accent); color:white; border-radius:50%; width:36px; height:36px; border:none; cursor:pointer; flex-shrink:0;">
+                    <form onsubmit="handleCopilotSubmit(event)" class="copilot-input-bar" id="copilotForm">
+                        <input type="text" id="copilotMessageInput" class="form-control" placeholder="Ask Copilot anything..." autocomplete="off" required style="border-radius:20px; padding:10px 14px; font-size:13px;">
+                        <button type="submit" id="copilotSendBtn" style="background:var(--primary-accent); color:white; border-radius:50%; width:36px; height:36px; border:none; cursor:pointer; flex-shrink:0;">
                             <i class="fas fa-paper-plane"></i>
                         </button>
                     </form>
@@ -977,6 +933,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         }
     }
 
+    // Background Async File Upload (Zero Page Reload)
     function handleFileSelected(input) {
         const file = input.files[0];
         if (!file) return;
@@ -1036,29 +993,112 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['send_chat']) && $portf
         });
     }
 
+    // -------------------------------------------------------------
+    // REAL AJAX COPILOT: No Full Page Reloads
+    // -------------------------------------------------------------
+    function appendChatBubble(sender, message, time) {
+        const chatBox = document.getElementById('copilotChatBox');
+        if (!chatBox) return;
+
+        const bubble = document.createElement('div');
+        bubble.className = 'chat-bubble ' + (sender === 'user' ? 'user' : 'ai');
+        
+        const header = document.createElement('div');
+        header.style.fontSize = '10px';
+        header.style.opacity = '0.75';
+        header.style.marginBottom = '4px';
+        header.innerHTML = (sender === 'user' ? 'You' : 'AI Copilot') + ' &bull; ' + time;
+
+        const body = document.createElement('div');
+        body.innerHTML = message.replace(/\n/g, '<br>');
+
+        bubble.appendChild(header);
+        bubble.appendChild(body);
+        chatBox.appendChild(bubble);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function showTypingIndicator() {
+        const chatBox = document.getElementById('copilotChatBox');
+        if (!chatBox) return;
+
+        const indicator = document.createElement('div');
+        indicator.id = 'copilotTypingBubble';
+        indicator.className = 'chat-bubble ai typing';
+        indicator.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Copilot is thinking...';
+        chatBox.appendChild(indicator);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function removeTypingIndicator() {
+        const indicator = document.getElementById('copilotTypingBubble');
+        if (indicator) indicator.remove();
+    }
+
+    function sendCopilotAjax(messageText, isEval = false) {
+        const sendBtn = document.getElementById('copilotSendBtn');
+        if (sendBtn) sendBtn.disabled = true;
+
+        showTypingIndicator();
+
+        const titleVal = document.querySelector('input[name="title"]')?.value || '';
+        const descVal  = document.getElementById('editorContent')?.value || '';
+
+        const formData = new FormData();
+        formData.append('ajax_chat', '1');
+        formData.append('message', messageText);
+        formData.append('context_title', titleVal);
+        formData.append('context_description', descVal);
+        if (isEval) formData.append('run_eval', '1');
+
+        fetch('student_portfolio.php?id=<?= $portfolio_id ?>', {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            removeTypingIndicator();
+            if (sendBtn) sendBtn.disabled = false;
+            if (data.success) {
+                appendChatBubble('ai', data.ai_reply, data.ai_time);
+            } else {
+                appendChatBubble('ai', data.error || 'Sorry, an error occurred.', 'Now');
+            }
+        })
+        .catch(err => {
+            removeTypingIndicator();
+            if (sendBtn) sendBtn.disabled = false;
+            appendChatBubble('ai', 'Connection error. Please try again.', 'Now');
+            console.error(err);
+        });
+    }
+
+    function handleCopilotSubmit(e) {
+        e.preventDefault();
+        const input = document.getElementById('copilotMessageInput');
+        const text = input.value.trim();
+        if (!text) return;
+
+        // Render user message immediately
+        appendChatBubble('user', text, 'Just now');
+        input.value = '';
+
+        sendCopilotAjax(text, false);
+    }
+
+    function triggerCopilotEval() {
+        appendChatBubble('user', 'Please evaluate my submission against the 100-Point PPST Rubric.', 'Just now');
+        sendCopilotAjax('', true);
+    }
+
     function confirmPortfolioSubmission() {
         return confirm("Are you sure you want to submit this portfolio for official review?\n\nOnce submitted, your lesson plan and attached files will be queued for evaluator/supervisor scoring.");
     }
 
+    // Scroll chat to bottom on initial load
     (function () {
         const chatBox = document.getElementById('copilotChatBox');
         if (chatBox) chatBox.scrollTop = chatBox.scrollHeight;
-
-        const overlay = document.getElementById('copilotLoadingOverlay');
-        const triggerForms = document.querySelectorAll('.copilot-submit-trigger');
-        const editorText = document.getElementById('editorContent');
-        const hiddenDesc = document.getElementById('hiddenContextDescription');
-
-        triggerForms.forEach(function (form) {
-            form.addEventListener('submit', function () {
-                if (editorText && hiddenDesc) {
-                    hiddenDesc.value = editorText.value;
-                }
-                if (overlay) {
-                    overlay.style.display = 'flex';
-                }
-            });
-        });
     })();
     </script>
 </body>
